@@ -50,7 +50,7 @@ cc_library(
     ],
     deps = [
         "//third_party/http_parser",
-        "@absl//absl/strings",
+        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -82,7 +82,7 @@ cc_library(
         ":common",
         "//third_party/base64",
         "//third_party/http_parser",
-        "@absl//absl/strings:str_format",
+        "@com_google_absl//absl/strings:str_format",
         "@libev",
     ],
 )
@@ -100,7 +100,7 @@ cc_library(
     ],
     deps = [
         ":common",
-        "@absl//absl/strings",
+        "@com_google_absl//absl/strings",
         "@libev",
     ],
 )

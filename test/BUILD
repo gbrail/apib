@@ -7,6 +7,10 @@ cc_library(
         "//third_party/http_parser",
         "@libev",
     ],
+    linkopts = [
+        "-lcrypto",
+        "-lssl",
+    ],
 )
 
 cc_binary(
@@ -38,6 +42,10 @@ cc_binary(
     deps = [
         ":keygen_lib",
     ],
+    linkopts = [
+        "-lcrypto",
+        "-lssl",
+    ],
 )
 
 cc_test(
@@ -45,8 +53,8 @@ cc_test(
     srcs = ["commandqueue_test.cc"],
     deps = [
         "//apib:io",
-        "@gtest",
-        "@gtest//:gtest_main",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -55,8 +63,8 @@ cc_test(
     srcs = ["lines_test.cc"],
     deps = [
         "//apib:common",
-        "@gtest",
-        "@gtest//:gtest_main",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -68,8 +76,8 @@ cc_test(
     ],
     deps = [
         "//apib:common",
-        "@gtest",
-        "@gtest//:gtest_main",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -78,7 +86,7 @@ cc_test(
     srcs = ["cpu_test.cc"],
     deps = [
         "//apib:common",
-        "@gtest",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -87,8 +95,8 @@ cc_test(
     srcs = ["reporting_test.cc"],
     deps = [
         "//apib:io",
-        "@gtest",
-        "@gtest//:gtest_main",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -97,8 +105,8 @@ cc_test(
     srcs = ["oauth_test.cc"],
     deps = [
         "//apib:io",
-        "@gtest",
-        "@gtest//:gtest_main",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -109,7 +117,7 @@ cc_test(
     deps = [
         ":testserver_lib",
         "//apib:io",
-        "@gtest",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -121,7 +129,7 @@ cc_test(
         ":keygen_lib",
         ":testserver_lib",
         "//apib:io",
-        "@gtest",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -130,7 +138,7 @@ cc_test(
     srcs = ["mon_test.cc"],
     deps = [
         "//apib:mon_lib",
-        "@gtest",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -139,7 +147,7 @@ cc_test(
     srcs = ["util_test.cc"],
     deps = [
         "//apib:common",
-        "@gtest",
-        "@gtest//:gtest_main",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )

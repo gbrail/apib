@@ -1,4 +1,5 @@
 bin/
 *.o
-bazel-*
+/bazel-*
 .vscode
+/build
