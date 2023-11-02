@@ -5,8 +5,7 @@ cc_library(
     deps = [
         "//apib:common",
         "//third_party/http_parser",
-        "//third_party/libev",
-        "@boringssl//:ssl",
+        "@libev",
     ],
 )
 
@@ -28,7 +27,6 @@ cc_library(
     ],
     deps = [
         "//apib:common",
-        "@boringssl//:ssl",
     ],
 )
 
@@ -107,24 +105,24 @@ cc_test(
 cc_test(
     name = "iotest",
     srcs = ["io_test.cc"],
+    linkstatic = True,
     deps = [
         ":testserver_lib",
         "//apib:io",
         "@gtest",
     ],
-    linkstatic = True,
 )
 
 cc_test(
     name = "tlstest",
     srcs = ["tls_test.cc"],
+    linkstatic = True,
     deps = [
         ":keygen_lib",
         ":testserver_lib",
         "//apib:io",
         "@gtest",
     ],
-    linkstatic = True,
 )
 
 cc_test(
@@ -143,5 +141,5 @@ cc_test(
         "//apib:common",
         "@gtest",
         "@gtest//:gtest_main",
-    ]
+    ],
 )

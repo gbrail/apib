@@ -46,7 +46,7 @@ cc_library(
         "status.h",
     ],
     linkopts = [
-    	"-lm",
+        "-lm",
     ],
     deps = [
         "//third_party/http_parser",
@@ -74,16 +74,16 @@ cc_library(
         "tlssocket.h",
     ],
     linkopts = [
+        "-lcrypto",
+        "-lssl",
         "-lpthread",
     ],
     deps = [
         ":common",
         "//third_party/base64",
         "//third_party/http_parser",
-        "//third_party/libev",
         "@absl//absl/strings:str_format",
-        "@boringssl//:crypto",
-        "@boringssl//:ssl",
+        "@libev",
     ],
 )
 
@@ -95,13 +95,13 @@ cc_library(
     hdrs = [
         "apib_mon.h",
     ],
-    deps = [
-        ":common",
-        "//third_party/libev",
-        "@absl//absl/strings",
-    ],
     linkopts = [
         "-lpthread",
+    ],
+    deps = [
+        ":common",
+        "@absl//absl/strings",
+        "@libev",
     ],
 )
 

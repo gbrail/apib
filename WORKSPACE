@@ -1,53 +1,36 @@
 load(
+    "@bazel_tools//tools/build_defs/repo:git.bzl",
+    "git_repository",
+)
+load(
     "@bazel_tools//tools/build_defs/repo:http.bzl",
     "http_archive",
 )
-load(
-    "@bazel_tools//tools/build_defs/repo:git.bzl",
-    "git_repository",
-    "new_git_repository",
+
+http_archive(
+    name = "bazel_skylib",
+    sha256 = "66ffd9315665bfaafc96b52278f57c7e2dd09f5ede279ea6d39b2be471e7e3aa",
+    urls = ["https://github.com/bazelbuild/bazel-skylib/releases/download/1.4.2/bazel-skylib-1.4.2.tar.gz"],
 )
-
-# This version contains a patch that fixes things on FreeBSD.
-git_repository(
-   name = "rules_foreign_cc",
-   commit = "38358597f9380e9098eb5642169ad23c169df98e",
-   remote = "https://github.com/gbrail/rules_foreign_cc.git",
-   shallow_since = "1586453104 -0700"
-)
-load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependencies")
-
-rules_foreign_cc_dependencies([])
-
-# Group the sources of the library so that make rule have access to it
-all_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])"""
 
 http_archive(
     name = "gtest",
-    sha256 = "9dc9157a9a1551ec7a7e43daea9a694a0bb5fb8bec81235d8a1e6ef64c716dcb",
-    strip_prefix = "googletest-release-1.10.0",
-    urls = ["https://github.com/google/googletest/archive/release-1.10.0.tar.gz"],
+    sha256 = "8ad598c73ad796e0d8280b082cebd82a630d73e73cd3c70057938a6501bba5d7",
+    strip_prefix = "googletest-1.14.0",
+    urls = ["https://github.com/google/googletest/archive/refs/tags/v1.14.0.tar.gz"],
 )
 
 http_archive(
     name = "libev",
+    build_file = "//third_party/libev:libev.bzl",
     sha256 = "507eb7b8d1015fbec5b935f34ebed15bf346bed04a11ab82b8eee848c4205aea",
     strip_prefix = "libev-4.33",
-    build_file_content = all_content,
     urls = ["http://dist.schmorp.de/libev/Attic/libev-4.33.tar.gz"],
-)
-
-# Take a commit from the "build-with-bazel" branch
-git_repository(
-    name = "boringssl",
-    commit = "24193678fd35f7f4f8b9be216cc4e7a76f056081",
-    remote = "https://boringssl.googlesource.com/boringssl",
-    shallow_since = "1586447192 +0000"
 )
 
 http_archive(
     name = "absl",
-    sha256 = "0db0d26f43ba6806a8a3338da3e646bb581f0ca5359b3a201d8fb8e4752fd5f8",
-    strip_prefix = "abseil-cpp-20200225.1",
-    urls = ["https://github.com/abseil/abseil-cpp/archive/20200225.1.tar.gz"],
+    sha256 = "987ce98f02eefbaf930d6e38ab16aa05737234d7afbab2d5c4ea7adbe50c28ed",
+    strip_prefix = "abseil-cpp-20230802.1",
+    urls = ["https://github.com/abseil/abseil-cpp/archive/refs/tags/20230802.1.tar.gz"],
 )
