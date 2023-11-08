@@ -8,7 +8,10 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"time"
 )
+
+const defaultTimeout = 60 * time.Second
 
 type Sender struct {
 	client  *http.Client
@@ -87,4 +90,20 @@ func (s *Sender) Send(ctx context.Context) error {
 		fmt.Printf("Response body: %d bytes\n", bytesRead)
 	}
 	return nil
+}
+
+func (s *Sender) Loop(c *Collector) {
+	bg := context.Background()
+	pleaseStop := false
+	for !pleaseStop {
+		ctx, cancel := context.WithTimeout(bg, defaultTimeout)
+		defer cancel()
+		start := time.Now()
+		err := s.Send(ctx)
+		if err == nil {
+			pleaseStop = c.Success(start, 0, 0)
+		} else {
+			pleaseStop = c.Failure()
+		}
+	}
 }
