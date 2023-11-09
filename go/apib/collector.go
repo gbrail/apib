@@ -9,15 +9,18 @@ import (
 )
 
 type Collector struct {
-	stopped       bool
-	attempts      int32
-	successes     int32
-	failures      int32
-	bytesSent     int64
-	bytesReceived int64
-	totalLatency  time.Duration
-	allLatencies  []time.Duration
-	lock          *sync.Mutex
+	stopped           bool
+	attempts          int32
+	successes         int32
+	intervalSuccesses int32
+	failures          int32
+	intervalFailures  int32
+	bytesSent         int64
+	bytesReceived     int64
+	lastError         error
+	totalLatency      time.Duration
+	allLatencies      []time.Duration
+	lock              *sync.Mutex
 }
 
 func NewCollector() *Collector {
@@ -38,6 +41,7 @@ func (c *Collector) Success(start time.Time, bytesSent int, bytesReceived int) b
 	defer c.lock.Unlock()
 	c.attempts += 1
 	c.successes += 1
+	c.intervalSuccesses += 1
 	c.bytesSent += int64(bytesSent)
 	c.bytesReceived += int64(bytesReceived)
 	c.totalLatency += latency
@@ -45,11 +49,13 @@ func (c *Collector) Success(start time.Time, bytesSent int, bytesReceived int) b
 	return c.stopped
 }
 
-func (c *Collector) Failure() bool {
+func (c *Collector) Failure(err error) bool {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.attempts += 1
 	c.failures += 1
+	c.intervalFailures += 1
+	c.lastError = err
 	return c.stopped
 }
 
@@ -75,15 +81,46 @@ func (c *Collector) Write(start time.Time, end time.Time, out io.Writer) {
 	fmt.Fprintf(out, "99%% Latency:      %.3f milliseconds\n", c.getLatencyPercent(durs, 99))
 }
 
+func (c *Collector) WriteTick(start time.Time, tickStart time.Time, testDuration time.Duration, out io.Writer) time.Time {
+	now := time.Now()
+	soFar := now.Sub(start) / time.Second
+	intervalDuration := now.Sub(tickStart)
+
+	c.lock.Lock()
+	throughput := float64(c.intervalSuccesses) / intervalDuration.Seconds()
+	intervalFailures := c.intervalFailures
+	lastError := c.lastError
+	c.intervalFailures = 0
+	c.intervalSuccesses = 0
+	c.lastError = nil
+	c.lock.Unlock()
+
+	if c.failures > 0 {
+		fmt.Fprintf(out, "(%d / %d) %.3f (%d errors)\n", soFar, testDuration/time.Second, throughput, intervalFailures)
+		if lastError != nil {
+			fmt.Fprintf(out, "  %v\n", lastError)
+		}
+	} else {
+		fmt.Fprintf(out, "(%d / %d) %.3f\n", soFar, testDuration/time.Second, throughput)
+	}
+	return now
+}
+
 func (c *Collector) getThroughput(duration time.Duration) float64 {
 	return float64(c.successes) / duration.Seconds()
 }
 
 func (c *Collector) getAverageLatency() float64 {
+	if c.successes == 0 {
+		return 0.0
+	}
 	return durationToMillis(c.totalLatency / time.Duration(c.successes))
 }
 
 func (c *Collector) getLatencyPercent(durs *durationSort, percent int) float64 {
+	if len(c.allLatencies) == 0 {
+		return 0.0
+	}
 	ix := (len(c.allLatencies) - 1) * percent / 100
 	return durationToMillis(durs.durations[ix])
 }

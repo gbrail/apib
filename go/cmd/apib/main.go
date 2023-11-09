@@ -11,13 +11,16 @@ import (
 	"github.com/gbrail/apib/apib"
 )
 
-const defaultTimeout = 60 * time.Second
+const (
+	defaultTimeout = 60 * time.Second
+	printInterval  = 5 * time.Second
+)
 
 func main() {
 	var doHelp bool
 	var verbose bool
 	var method string
-	var duration int
+	var durationSecs int
 	var concurrency int
 	var justOnce bool
 
@@ -25,7 +28,7 @@ func main() {
 	flag.BoolVar(&verbose, "v", false, "Print verbose output")
 	flag.StringVar(&method, "x", "GET", "HTTP method")
 	flag.BoolVar(&justOnce, "1", false, "Send just one request")
-	flag.IntVar(&duration, "d", 60, "Test run duration in seconds")
+	flag.IntVar(&durationSecs, "d", 60, "Test run duration in seconds")
 	flag.IntVar(&concurrency, "c", 1, "Number of parallel requests")
 	flag.Parse()
 	if !flag.Parsed() || doHelp || flag.NArg() != 1 {
@@ -51,11 +54,20 @@ func main() {
 			os.Exit(3)
 		}
 	} else {
+		duration := time.Duration(durationSecs) * time.Second
 		collector := apib.NewCollector()
 		wg := &sync.WaitGroup{}
 		wg.Add(concurrency)
-		time.AfterFunc(time.Duration(duration)*time.Second, collector.Stop)
-		start := time.Now()
+		time.AfterFunc(duration, collector.Stop)
+		printTicker := time.NewTicker(printInterval)
+		startTime := time.Now()
+		tickStart := startTime
+		go func() {
+			for {
+				<-printTicker.C
+				tickStart = collector.WriteTick(startTime, tickStart, duration, os.Stdout)
+			}
+		}()
 		for i := 0; i < concurrency; i++ {
 			go func() {
 				sender.Loop(collector)
@@ -63,6 +75,6 @@ func main() {
 			}()
 		}
 		wg.Wait()
-		collector.Write(start, time.Now(), os.Stdout)
+		collector.Write(startTime, time.Now(), os.Stdout)
 	}
 }

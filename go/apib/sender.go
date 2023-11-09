@@ -1,6 +1,7 @@
 package apib
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ const defaultTimeout = 60 * time.Second
 type Sender struct {
 	client  *http.Client
 	url     *url.URL
+	urlStr  string
 	method  string
 	verbose bool
 }
@@ -28,6 +30,7 @@ func NewSender(urlStr string) (*Sender, error) {
 	return &Sender{
 		client: &http.Client{},
 		url:    u,
+		urlStr: urlStr,
 		method: "GET",
 	}, nil
 }
@@ -41,12 +44,10 @@ func (s *Sender) SetMethod(method string) {
 }
 
 func (s *Sender) Send(ctx context.Context) error {
-	req := &http.Request{
-		Method: s.method,
-		URL:    s.url,
-		Header: make(http.Header),
+	req, err := http.NewRequestWithContext(ctx, s.method, s.urlStr, &bytes.Buffer{})
+	if err != nil {
+		return fmt.Errorf("error creating request: %w", err)
 	}
-	req = req.WithContext(ctx)
 	if s.verbose {
 		dump, err := httputil.DumpRequestOut(req, false)
 		if err != nil {
@@ -62,6 +63,7 @@ func (s *Sender) Send(ctx context.Context) error {
 		}
 		return ret
 	}
+	defer resp.Body.Close()
 	if s.verbose {
 		dump, err := httputil.DumpResponse(resp, false)
 		if err != nil {
@@ -103,7 +105,7 @@ func (s *Sender) Loop(c *Collector) {
 		if err == nil {
 			pleaseStop = c.Success(start, 0, 0)
 		} else {
-			pleaseStop = c.Failure()
+			pleaseStop = c.Failure(err)
 		}
 	}
 }
