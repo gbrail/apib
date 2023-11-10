@@ -26,7 +26,7 @@ func TestSender(t *testing.T) {
 }
 
 func testGet100(t *testing.T, client *http.Client, url string) {
-	sender, err := NewSender(fmt.Sprintf("%s/get100", url))
+	sender, err := NewSender(fmt.Sprintf("%s/get100", url), 1)
 	if err != nil {
 		t.Fatalf("Error creating sender: %v", err)
 	}
@@ -37,7 +37,7 @@ func testGet100(t *testing.T, client *http.Client, url string) {
 }
 
 func testGet404(t *testing.T, client *http.Client, url string) {
-	sender, err := NewSender(fmt.Sprintf("%s/notfound", url))
+	sender, err := NewSender(fmt.Sprintf("%s/notfound", url), 1)
 	if err != nil {
 		t.Fatalf("Error creating sender: %v", err)
 	}

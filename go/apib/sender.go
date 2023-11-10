@@ -101,6 +101,7 @@ func (s *Sender) Send(ctx context.Context) error {
 }
 
 func (s *Sender) Loop(ctx context.Context, c *Collector) {
+	localStats := NewLocalCollector()
 	pleaseStop := false
 	for !pleaseStop {
 		reqCtx, cancel := context.WithTimeout(ctx, defaultTimeout)
@@ -108,9 +109,12 @@ func (s *Sender) Loop(ctx context.Context, c *Collector) {
 		start := time.Now()
 		err := s.Send(reqCtx)
 		if err == nil {
-			pleaseStop = c.Success(start, 0, 0)
+			localStats.Success(start, 0, 0)
+			pleaseStop = c.Success()
 		} else {
+			localStats.Failure()
 			pleaseStop = c.Failure(err)
 		}
 	}
+	c.Collect(localStats)
 }
