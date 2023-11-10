@@ -9,17 +9,27 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"sync"
 	"time"
 )
 
-const defaultTimeout = 60 * time.Second
+const (
+	defaultTimeout = 60 * time.Second
+	readBufferSize = 8192
+)
+
+// This avoids a compiler warning
+type ByteBuf struct {
+	buf []byte
+}
 
 type Sender struct {
-	client  *http.Client
-	url     *url.URL
-	urlStr  string
-	method  string
-	verbose bool
+	client     *http.Client
+	url        *url.URL
+	urlStr     string
+	method     string
+	verbose    bool
+	bufferPool *sync.Pool
 }
 
 func NewSender(urlStr string, expectedConnections int) (*Sender, error) {
@@ -38,6 +48,11 @@ func NewSender(urlStr string, expectedConnections int) (*Sender, error) {
 		url:    u,
 		urlStr: urlStr,
 		method: "GET",
+		bufferPool: &sync.Pool{
+			New: func() any {
+				return &ByteBuf{buf: make([]byte, readBufferSize)}
+			},
+		},
 	}, nil
 }
 
@@ -80,11 +95,12 @@ func (s *Sender) Send(ctx context.Context) error {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("received error status: %d", resp.StatusCode)
 	}
-	tmp := make([]byte, 8192)
+	tmp := s.bufferPool.Get().(*ByteBuf)
+	defer s.bufferPool.Put(tmp)
 	bytesRead := 0
 	for err == nil {
 		var r int
-		r, err = resp.Body.Read(tmp)
+		r, err = resp.Body.Read(tmp.buf)
 		bytesRead += r
 	}
 	if err != io.EOF {
