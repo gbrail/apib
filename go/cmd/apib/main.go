@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gbrail/apib/apib"
+	"github.com/gbrail/apib/internal/apib"
 )
 
 const (
