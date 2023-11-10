@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http/httptrace"
 	"os"
+	"runtime/pprof"
 	"sync"
 	"time"
 
@@ -24,6 +25,7 @@ func main() {
 	var durationSecs int
 	var concurrency int
 	var justOnce bool
+	var profileFile string
 
 	flag.BoolVar(&doHelp, "h", false, "Print this message")
 	flag.BoolVar(&verbose, "v", false, "Print verbose output")
@@ -31,12 +33,28 @@ func main() {
 	flag.BoolVar(&justOnce, "1", false, "Send just one request")
 	flag.IntVar(&durationSecs, "d", 60, "Test run duration in seconds")
 	flag.IntVar(&concurrency, "c", 1, "Number of parallel requests")
+	flag.StringVar(&profileFile, "P", "", "Enable CPU profiling and store in file")
 	flag.Parse()
 	if !flag.Parsed() || doHelp || flag.NArg() != 1 {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
 	url := flag.Args()[0]
+
+	if profileFile != "" {
+		prof, err := os.Create(profileFile)
+		if err != nil {
+			fmt.Printf("Error creating profile file: %v\n", err)
+			os.Exit(2)
+		}
+		defer prof.Close()
+		err = pprof.StartCPUProfile(prof)
+		if err != nil {
+			fmt.Printf("Error starting profiling: %v\n", err)
+			os.Exit(2)
+		}
+		defer pprof.StopCPUProfile()
+	}
 
 	sender, err := apib.NewSender(url, concurrency)
 	if err != nil {
