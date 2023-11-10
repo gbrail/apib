@@ -22,13 +22,19 @@ type Sender struct {
 	verbose bool
 }
 
-func NewSender(urlStr string) (*Sender, error) {
+func NewSender(urlStr string, expectedConnections int) (*Sender, error) {
 	u, err := url.Parse(urlStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %q: %w", urlStr, err)
 	}
 	return &Sender{
-		client: &http.Client{},
+		client: &http.Client{
+			Transport: &http.Transport{
+				MaxIdleConns:        expectedConnections * 2,
+				MaxIdleConnsPerHost: expectedConnections * 2,
+				MaxConnsPerHost:     expectedConnections * 2,
+			},
+		},
 		url:    u,
 		urlStr: urlStr,
 		method: "GET",
@@ -94,14 +100,13 @@ func (s *Sender) Send(ctx context.Context) error {
 	return nil
 }
 
-func (s *Sender) Loop(c *Collector) {
-	bg := context.Background()
+func (s *Sender) Loop(ctx context.Context, c *Collector) {
 	pleaseStop := false
 	for !pleaseStop {
-		ctx, cancel := context.WithTimeout(bg, defaultTimeout)
+		reqCtx, cancel := context.WithTimeout(ctx, defaultTimeout)
 		defer cancel()
 		start := time.Now()
-		err := s.Send(ctx)
+		err := s.Send(reqCtx)
 		if err == nil {
 			pleaseStop = c.Success(start, 0, 0)
 		} else {

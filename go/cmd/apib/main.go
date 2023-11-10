@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http/httptrace"
 	"os"
 	"sync"
 	"time"
@@ -37,7 +38,7 @@ func main() {
 	}
 	url := flag.Args()[0]
 
-	sender, err := apib.NewSender(url)
+	sender, err := apib.NewSender(url, concurrency)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(2)
@@ -45,8 +46,14 @@ func main() {
 	sender.SetMethod(method)
 	sender.SetVerbose(verbose)
 
+	rootCtx := context.Background()
+
+	if verbose {
+		rootCtx = httptrace.WithClientTrace(rootCtx, apib.MakeTracer())
+	}
+
 	if justOnce {
-		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+		ctx, cancel := context.WithTimeout(rootCtx, defaultTimeout)
 		defer cancel()
 		err = sender.Send(ctx)
 		if err != nil {
@@ -70,7 +77,7 @@ func main() {
 		}()
 		for i := 0; i < concurrency; i++ {
 			go func() {
-				sender.Loop(collector)
+				sender.Loop(rootCtx, collector)
 				wg.Done()
 			}()
 		}
