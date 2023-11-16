@@ -3,3 +3,5 @@ bin/
 /c/bazel-*
 .vscode
 /build
+/go/apib
+/go/target
