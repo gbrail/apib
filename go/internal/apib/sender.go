@@ -3,6 +3,7 @@ package apib
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -43,6 +44,9 @@ func NewSender(urlStr string, expectedConnections int) (*Sender, error) {
 				MaxIdleConns:        expectedConnections * 2,
 				MaxIdleConnsPerHost: expectedConnections * 2,
 				MaxConnsPerHost:     expectedConnections * 2,
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
 			},
 		},
 		url:    u,
