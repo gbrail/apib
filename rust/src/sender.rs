@@ -1,6 +1,8 @@
 use crate::collector::{Collector, LocalCollector};
 use crate::error::Error;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
+
+const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct Sender {
     url: String,
@@ -9,12 +11,21 @@ pub struct Sender {
 }
 
 impl Sender {
-    pub fn new(url: &str) -> Self {
-        Self {
+    pub fn new(url: &str) -> Result<Self, Error> {
+        let client = reqwest::ClientBuilder::new()
+            .user_agent("apib")
+            .no_gzip()
+            .no_brotli()
+            .no_deflate()
+            .timeout(HTTP_TIMEOUT)
+            .danger_accept_invalid_certs(true)
+            .build()?;
+
+        Ok(Self {
             url: url.into(),
-            client: reqwest::Client::new(),
+            client,
             verbose: false,
-        }
+        })
     }
 
     pub fn set_verbose(&mut self, verbose: bool) {
@@ -50,6 +61,9 @@ impl Sender {
                     please_stop = collector.success();
                 }
                 Err(e) => {
+                    if self.verbose {
+                        println!("Error: {}", e);
+                    }
                     local_stats.failure();
                     please_stop = collector.failure(e);
                 }

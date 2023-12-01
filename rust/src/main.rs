@@ -27,7 +27,7 @@ struct Args {
 async fn main() {
     let args = Args::parse();
     let collector = Arc::new(Collector::new());
-    let mut sender = Sender::new(&args.url);
+    let mut sender = Sender::new(&args.url).expect("Error initializing reqwest");
     sender.set_verbose(args.verbose);
 
     let sc = Arc::new(sender);
