@@ -26,6 +26,8 @@ struct Args {
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
+    todo!()
+    /*
     let collector = Arc::new(Collector::new());
     let mut sender = Sender::new(&args.url).expect("Error initializing reqwest");
     sender.set_verbose(args.verbose);
@@ -62,4 +64,5 @@ async fn main() {
     }
 
     collector.write(start_time, SystemTime::now());
+    */
 }

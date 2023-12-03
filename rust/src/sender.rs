@@ -1,29 +1,19 @@
 use crate::collector::{Collector, LocalCollector};
 use crate::error::Error;
 use std::time::{Duration, SystemTime};
+use url::Url;
 
 const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct Sender {
-    url: String,
-    client: reqwest::Client,
+    url: Url,
     verbose: bool,
 }
 
 impl Sender {
-    pub fn new(url: &str) -> Result<Self, Error> {
-        let client = reqwest::ClientBuilder::new()
-            .user_agent("apib")
-            .no_gzip()
-            .no_brotli()
-            .no_deflate()
-            .timeout(HTTP_TIMEOUT)
-            .danger_accept_invalid_certs(true)
-            .build()?;
-
+    pub fn new(url: Url) -> Result<Self, Error> {
         Ok(Self {
-            url: url.into(),
-            client,
+            url,
             verbose: false,
         })
     }
@@ -32,8 +22,13 @@ impl Sender {
         self.verbose = verbose;
     }
 
-    pub async fn send(&self) -> Result<(), Error> {
-        let request = self.client.get(&self.url);
+    pub async fn send(&mut self) -> Result<(), Error> {
+        // Check if connection is saved, if not, open a new one
+        // Send using hyper library directly
+        //   Be sure to set Host and User-Agent headers
+        // Read result
+        // Close connection if it's important that we do that
+        /*let request = self.client.get(&self.url);
         let response = request.send().await?;
 
         if !response.status().is_success() {
@@ -43,29 +38,34 @@ impl Sender {
             for (key, value) in response.headers().iter() {
                 println!("{}: {}", key, value.to_str().unwrap());
             }
-            println!("\n{}\n", response.text().await?);
+            println!("\n{}", response.text().await?);
         } else {
             response.bytes().await?;
         }
         Ok(())
+        */
+        todo!()
     }
 
-    pub async fn do_loop(&self, collector: &Collector) {
+    pub async fn do_loop(&mut self, collector: &Collector) {
         let mut local_stats = LocalCollector::new();
-        let mut please_stop = false;
-        while !please_stop {
+        loop {
             let start = SystemTime::now();
             match self.send().await {
                 Ok(_) => {
                     local_stats.success(start, 0, 0);
-                    please_stop = collector.success();
+                    if collector.success() {
+                        break;
+                    }
                 }
                 Err(e) => {
                     if self.verbose {
                         println!("Error: {}", e);
                     }
                     local_stats.failure();
-                    please_stop = collector.failure(e);
+                    if collector.failure(e) {
+                        break;
+                    }
                 }
             }
         }
