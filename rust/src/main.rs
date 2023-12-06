@@ -8,6 +8,7 @@ use tokio::sync::mpsc;
 mod collector;
 mod error;
 mod sender;
+mod tokio_rt;
 
 const TICK_DURATION: Duration = Duration::from_secs(5);
 
@@ -17,6 +18,8 @@ struct Args {
     verbose: bool,
     #[arg()]
     url: String,
+    #[arg(short = '1')]
+    just_one: bool,
     #[arg(short, default_value = "1")]
     concurrency: u16,
     #[arg(short, default_value = "30")]
@@ -26,23 +29,29 @@ struct Args {
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
-    todo!()
-    /*
     let collector = Arc::new(Collector::new());
-    let mut sender = Sender::new(&args.url).expect("Error initializing reqwest");
+    let mut sender = Sender::new(&args.url).expect("Error initializing first sender");
     sender.set_verbose(args.verbose);
 
-    let sc = Arc::new(sender);
+    if args.just_one {
+        if let Err(e) = sender.send().await {
+            println!("Error on send: {}", e);
+        }
+        return;
+    }
+
     let (send_done, mut recv_done) = mpsc::unbounded_channel();
     let start_time = SystemTime::now();
     let test_duration = Duration::from_secs(args.duration as u64);
+    let url = args.url.to_string();
 
     for _ in 0..args.concurrency {
         let coll = Arc::clone(&collector);
         let done = send_done.clone();
-        let s = Arc::clone(&sc);
+        let u = url.clone();
         tokio::spawn(async move {
-            s.do_loop(coll.as_ref()).await;
+            let mut sender = Sender::new(&u).expect("error creating sender");
+            sender.do_loop(coll.as_ref()).await;
             done.send(true).unwrap();
         });
     }
@@ -58,11 +67,8 @@ async fn main() {
 
     tokio::time::sleep(test_duration).await;
     collector.stop();
-
     for _ in 0..args.concurrency {
         recv_done.recv().await.unwrap();
     }
-
     collector.write(start_time, SystemTime::now());
-    */
 }
