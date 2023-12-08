@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-func makeCertificate() ([]byte, []byte, error) {
+func MakeCertificate(validDays int) ([]byte, []byte, error) {
 	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot generate private key: %w", err)
@@ -30,9 +30,8 @@ func makeCertificate() ([]byte, []byte, error) {
 			CommonName:   "localhost",
 			Organization: []string{"apib"},
 		},
-		NotBefore: time.Now(),
-		// Valid for 7 days
-		NotAfter:              time.Now().AddDate(0, 0, 7),
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().AddDate(0, 0, validDays),
 		KeyUsage:              x509.KeyUsageKeyAgreement | x509.KeyUsageDataEncipherment | x509.KeyUsageDigitalSignature,
 		BasicConstraintsValid: true,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},

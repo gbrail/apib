@@ -38,7 +38,7 @@ func (s *Server) Run() error {
 	var listener net.Listener
 
 	if s.tls {
-		cert, key, err := makeCertificate()
+		cert, key, err := MakeCertificate(7)
 		if err != nil {
 			return err
 		}
