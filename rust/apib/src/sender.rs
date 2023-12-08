@@ -80,6 +80,8 @@ impl Sender {
     }
 
     pub async fn send(&mut self) -> Result<(), Error> {
+        todo!()
+        /*
         let mut sender = if self.sender.is_none() {
             if self.verbose {
                 println!("Connecting to {}:{}...", self.host, self.port);
@@ -105,6 +107,7 @@ impl Sender {
             } else {
                 let io = TokioIo::new(new_conn);
                 http1::handshake(io).await?
+                todo!()
             };
 
             let (sender, conn_driver) = ;
@@ -146,6 +149,7 @@ impl Sender {
         }
         self.sender = Some(sender);
         Ok(())
+        */
     }
 
     pub async fn do_loop(&mut self, collector: &Collector) {

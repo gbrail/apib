@@ -1,18 +1,6 @@
-[package]
-name = "apib"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-clap = { version = "4", features = ["derive"] }
-http-body-util = "0"
-hyper = { version = "1", features = ["http1", "client"]}
-rustls = "0"
-rustls-pki-types = "1"
-pin-project-lite = "0"
-tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "time"]}
-tokio-rustls = "0"
-url = "2"
+[workspace]
+resolver = "2"
+members = ["apib"]
 
 [profile.release]
 # For profiling
