@@ -5,4 +5,5 @@ bin/
 /build
 /go/apib
 /go/target
+/go/makecerts
 /rust/target

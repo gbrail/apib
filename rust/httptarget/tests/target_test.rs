@@ -1,9 +1,13 @@
-use httptarget::Target;
+use httptarget::Builder;
 use reqwest::StatusCode;
 
 #[tokio::test]
 async fn test_get() {
-    let svr = Target::new(0, true).await.expect("Error starting server");
+    let svr = Builder::new()
+        .use_localhost(true)
+        .build()
+        .await
+        .expect("Error starting server");
     let url = format!("http://{}/hello", svr.address());
     let response = reqwest::get(url).await.expect("Error getting result");
     assert_eq!(response.status(), StatusCode::OK);
@@ -13,7 +17,11 @@ async fn test_get() {
 
 #[tokio::test]
 async fn test_not_found() {
-    let svr = Target::new(0, true).await.expect("Error starting server");
+    let svr = Builder::new()
+        .use_localhost(true)
+        .build()
+        .await
+        .expect("Error starting server");
     let url = format!("http://{}/NOTFOUND", svr.address());
     let response = reqwest::get(url).await.expect("Error getting result");
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
@@ -22,7 +30,11 @@ async fn test_not_found() {
 
 #[tokio::test]
 async fn test_wrong_method() {
-    let svr = Target::new(0, true).await.expect("Error starting server");
+    let svr = Builder::new()
+        .use_localhost(true)
+        .build()
+        .await
+        .expect("Error starting server");
     let url = format!("http://{}/hello", svr.address());
     let client = reqwest::Client::new();
     let response = client
