@@ -6,8 +6,11 @@ mod tls;
 pub use builder::Builder;
 pub use error::Error;
 
-use hyper::{server::conn::http1, service::service_fn};
-use hyper_util::rt::TokioIo;
+use hyper::service::service_fn;
+use hyper_util::{
+    rt::{TokioExecutor, TokioIo},
+    server::conn::auto,
+};
 use rustls::ServerConfig;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -88,8 +91,8 @@ impl Target {
     fn run_plain(stream: TcpStream) {
         let io = TokioIo::new(stream);
         tokio::spawn(async move {
-            if let Err(e) = http1::Builder::new()
-                .serve_connection(io, service_fn(service::handle))
+            if let Err(e) = auto::Builder::new(TokioExecutor::new())
+                .serve_connection_with_upgrades(io, service_fn(service::handle))
                 .await
             {
                 println!("Error on connection: {}", e)
@@ -103,8 +106,8 @@ impl Target {
         let tls_stream = acceptor.accept(stream).await?;
         let io = TokioIo::new(tls_stream);
         tokio::spawn(async move {
-            if let Err(e) = http1::Builder::new()
-                .serve_connection(io, service_fn(service::handle))
+            if let Err(e) = auto::Builder::new(TokioExecutor::new())
+                .serve_connection_with_upgrades(io, service_fn(service::handle))
                 .await
             {
                 println!("Error on connection: {}", e)

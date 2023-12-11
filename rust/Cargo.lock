@@ -458,7 +458,6 @@ dependencies = [
  "http-body-util",
  "hyper 1.0.1",
  "hyper-util",
- "pin-project-lite",
  "reqwest",
  "rustls",
  "rustls-pemfile",
