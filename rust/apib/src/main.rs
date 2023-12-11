@@ -7,8 +7,8 @@ use tokio::sync::mpsc;
 
 mod collector;
 mod error;
+mod null_verifier;
 mod sender;
-mod tokio_rt;
 
 const TICK_DURATION: Duration = Duration::from_secs(5);
 

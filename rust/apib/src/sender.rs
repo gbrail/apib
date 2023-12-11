@@ -1,18 +1,25 @@
-use crate::collector::{Collector, LocalCollector};
-use crate::error::Error;
-use crate::tokio_rt::TokioIo;
+use crate::{
+    collector::{Collector, LocalCollector},
+    error::Error,
+    null_verifier::NoCertificateVerification,
+};
 use http_body_util::BodyExt;
-use hyper::client::conn::http1::{self, SendRequest};
-use hyper::Request;
+use hyper::{
+    client::conn::http1::{self, SendRequest},
+    Request,
+};
+use hyper_util::rt::TokioIo;
 use rustls::ClientConfig;
-use rustls_pki_types::{CertificateDer, ServerName, UnixTime};
-use std::sync::Arc;
-use std::time::{Duration, SystemTime};
-use tokio::net::TcpStream;
+use rustls_pki_types::ServerName;
+use std::{sync::Arc, time::SystemTime};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::TcpStream,
+};
 use tokio_rustls::TlsConnector;
 use url::Url;
 
-const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
+//const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 const USER_AGENT: &str = "apib";
 
 pub struct Sender {
@@ -29,21 +36,18 @@ impl Sender {
     pub fn new(u: &str) -> Result<Self, Error> {
         let url = Url::parse(u)?;
         if url.scheme() != "http" && url.scheme() != "https" {
-            return Err(Error::IOError(format!(
-                "Invalid HTTP scheme: {}",
-                url.scheme()
-            )));
+            return Err(Error::IO(format!("Invalid HTTP scheme: {}", url.scheme())));
         }
         let host = match url.host_str() {
             Some(h) => h.to_string(),
             None => {
-                return Err(Error::IOError(format!("URL {} must have host and port", u)));
+                return Err(Error::IO(format!("URL {} must have host and port", u)));
             }
         };
         let port = match url.port_or_known_default() {
             Some(p) => p,
             None => {
-                return Err(Error::IOError(format!("URL {} must have host and port", u)));
+                return Err(Error::IO(format!("URL {} must have host and port", u)));
             }
         };
         let host_hdr = match url.port() {
@@ -79,9 +83,20 @@ impl Sender {
         self.verbose = verbose;
     }
 
+    async fn start_connection<T: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
+        conn: T,
+    ) -> Result<SendRequest<String>, Error> {
+        let io = TokioIo::new(conn);
+        let (sender, conn_driver) = http1::handshake(io).await?;
+        tokio::spawn(async move {
+            if let Err(e) = conn_driver.await {
+                println!("Error processing connection: {}", e);
+            }
+        });
+        Ok(sender)
+    }
+
     pub async fn send(&mut self) -> Result<(), Error> {
-        todo!()
-        /*
         let mut sender = if self.sender.is_none() {
             if self.verbose {
                 println!("Connecting to {}:{}...", self.host, self.port);
@@ -92,7 +107,7 @@ impl Sender {
                 println!("Connected");
             }
 
-            let (sender, conn_driver) = if let Some(tls_config) = &self.tls {
+            if let Some(tls_config) = &self.tls {
                 if self.verbose {
                     println!("Connecting using TLS...");
                 }
@@ -102,22 +117,24 @@ impl Sender {
                     .to_owned();
                 let connector = TlsConnector::from(cfg);
                 let tls_conn = connector.connect(sn, new_conn).await?;
-                let io = TokioIo::new(tls_conn);
-                http1::handshake(io).await?
-            } else {
-                let io = TokioIo::new(new_conn);
-                http1::handshake(io).await?
-                todo!()
-            };
-
-            let (sender, conn_driver) = ;
-            tokio::spawn(async move {
-                if let Err(e) = conn_driver.await {
-                    println!("Error processing connection: {}", e);
+                if self.verbose {
+                    let (_, tls_info) = tls_conn.get_ref();
+                    if let Some(ap) = tls_info.alpn_protocol() {
+                        println!("ALPN protocol: {:?}", ap);
+                    }
+                    if let Some(pv) = tls_info.protocol_version() {
+                        println!("Connected using {:?}", pv);
+                    }
+                    if let Some(cs) = tls_info.negotiated_cipher_suite() {
+                        println!("Cipher: {:?}", cs);
+                    }
                 }
-            });
-            sender
+                Self::start_connection(tls_conn).await?
+            } else {
+                Self::start_connection(new_conn).await?
+            }
         } else {
+            // Take the sender saved on this object -- we'll put it back on success.
             self.sender.take().unwrap()
         };
 
@@ -136,7 +153,7 @@ impl Sender {
         if !response.status().is_success() {
             // We can re-use the connection now
             self.sender = Some(sender);
-            return Err(Error::HTTPError(response.status().as_u16()));
+            return Err(Error::Http(response.status().as_u16()));
         }
         if self.verbose {
             for (key, value) in response.headers().iter() {
@@ -149,7 +166,6 @@ impl Sender {
         }
         self.sender = Some(sender);
         Ok(())
-        */
     }
 
     pub async fn do_loop(&mut self, collector: &Collector) {
@@ -175,42 +191,5 @@ impl Sender {
             }
         }
         collector.collect(local_stats);
-    }
-}
-
-#[derive(Debug)]
-struct NoCertificateVerification {}
-impl rustls::client::danger::ServerCertVerifier for NoCertificateVerification {
-    fn verify_server_cert(
-        &self,
-        end_entity: &CertificateDer<'_>,
-        intermediates: &[CertificateDer<'_>],
-        server_name: &ServerName<'_>,
-        ocsp_response: &[u8],
-        now: UnixTime,
-    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
-        Ok(rustls::client::danger::ServerCertVerified::assertion())
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        vec![]
     }
 }

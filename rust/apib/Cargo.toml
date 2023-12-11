@@ -5,9 +5,9 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-httparse = "1"
 http-body-util = "0"
 hyper = { version = "1", features = ["http1", "client"]}
+hyper-util = { version = "0", features = ["full"] }
 rustls = "0"
 rustls-pki-types = "1"
 pin-project-lite = "0"
