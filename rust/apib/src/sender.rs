@@ -1,7 +1,7 @@
 use crate::{
     collector::{Collector, LocalCollector},
+    config::Config,
     error::Error,
-    null_verifier::NoCertificateVerification,
 };
 use http_body_util::BodyExt;
 use hyper::{
@@ -9,7 +9,6 @@ use hyper::{
     Request,
 };
 use hyper_util::rt::TokioIo;
-use rustls::ClientConfig;
 use rustls_pki_types::ServerName;
 use std::{sync::Arc, time::SystemTime};
 use tokio::{
@@ -17,70 +16,24 @@ use tokio::{
     net::TcpStream,
 };
 use tokio_rustls::TlsConnector;
-use url::Url;
 
 //const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 const USER_AGENT: &str = "apib";
 
 pub struct Sender {
-    host: String,
-    port: u16,
-    host_hdr: String,
-    path: String,
-    tls: Option<Arc<ClientConfig>>,
-    verbose: bool,
+    config: Arc<Config>,
     sender: Option<SendRequest<String>>,
+    verbose: bool,
 }
 
 impl Sender {
-    pub fn new(u: &str) -> Result<Self, Error> {
-        let url = Url::parse(u)?;
-        if url.scheme() != "http" && url.scheme() != "https" {
-            return Err(Error::IO(format!("Invalid HTTP scheme: {}", url.scheme())));
-        }
-        let host = match url.host_str() {
-            Some(h) => h.to_string(),
-            None => {
-                return Err(Error::IO(format!("URL {} must have host and port", u)));
-            }
-        };
-        let port = match url.port_or_known_default() {
-            Some(p) => p,
-            None => {
-                return Err(Error::IO(format!("URL {} must have host and port", u)));
-            }
-        };
-        let host_hdr = match url.port() {
-            Some(p) => format!("{}:{}", host, p),
-            None => host.clone(),
-        };
-        let path = match url.query() {
-            Some(q) => format!("{}?{}", url.path(), q),
-            None => url.path().to_string(),
-        };
-        let tls = if url.scheme() == "https" {
-            let cfg = rustls::ClientConfig::builder()
-                .dangerous()
-                .with_custom_certificate_verifier(Arc::new(NoCertificateVerification {}))
-                .with_no_client_auth();
-            Some(Arc::new(cfg))
-        } else {
-            None
-        };
-
-        Ok(Self {
-            host,
-            port,
-            host_hdr,
-            path,
-            tls,
-            verbose: false,
+    pub fn new(config: Arc<Config>) -> Self {
+        let verbose = config.verbose;
+        Self {
+            config,
             sender: None,
-        })
-    }
-
-    pub fn set_verbose(&mut self, verbose: bool) {
-        self.verbose = verbose;
+            verbose,
+        }
     }
 
     async fn start_connection<T: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
@@ -99,20 +52,21 @@ impl Sender {
     pub async fn send(&mut self) -> Result<(), Error> {
         let mut sender = if self.sender.is_none() {
             if self.verbose {
-                println!("Connecting to {}:{}...", self.host, self.port);
+                println!("Connecting to {}:{}...", self.config.host, self.config.port);
             }
-            let new_conn = TcpStream::connect((self.host.as_str(), self.port)).await?;
+            let new_conn =
+                TcpStream::connect((self.config.host.as_str(), self.config.port)).await?;
             new_conn.set_nodelay(true)?;
             if self.verbose {
                 println!("Connected");
             }
 
-            if let Some(tls_config) = &self.tls {
+            if let Some(tls_config) = &self.config.tls {
                 if self.verbose {
                     println!("Connecting using TLS...");
                 }
                 let cfg = Arc::clone(tls_config);
-                let sn = ServerName::try_from(self.host.as_str())
+                let sn = ServerName::try_from(self.config.host.as_str())
                     .expect("Invalid SNI host name")
                     .to_owned();
                 let connector = TlsConnector::from(cfg);
@@ -139,8 +93,8 @@ impl Sender {
         };
 
         let request = Request::builder()
-            .uri(self.path.as_str())
-            .header("Host", self.host_hdr.as_str())
+            .uri(self.config.path.as_str())
+            .header("Host", self.config.host_hdr.as_str())
             .header("User-Agent", USER_AGENT)
             .body("".to_string())?;
 

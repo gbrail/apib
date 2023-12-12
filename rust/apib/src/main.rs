@@ -1,11 +1,13 @@
-use crate::collector::Collector;
-use crate::sender::Sender;
+use crate::{collector::Collector, config::Config, sender::Sender};
 use clap::Parser;
-use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 use tokio::sync::mpsc;
 
 mod collector;
+mod config;
 mod error;
 mod null_verifier;
 mod sender;
@@ -29,9 +31,18 @@ struct Args {
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
+    let mut raw_config = match Config::new(&args.url) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            println!("Invalid configuration: {}", e);
+            return;
+        }
+    };
+    raw_config.set_verbose(args.verbose);
+
+    let config = Arc::new(raw_config);
     let collector = Arc::new(Collector::new());
-    let mut sender = Sender::new(&args.url).expect("Error initializing first sender");
-    sender.set_verbose(args.verbose);
+    let mut sender = Sender::new(Arc::clone(&config));
 
     if args.just_one {
         if let Err(e) = sender.send().await {
@@ -43,15 +54,14 @@ async fn main() {
     let (send_done, mut recv_done) = mpsc::unbounded_channel();
     let start_time = SystemTime::now();
     let test_duration = Duration::from_secs(args.duration as u64);
-    let url = args.url.to_string();
 
     for _ in 0..args.concurrency {
-        let coll = Arc::clone(&collector);
+        let local_collector = Arc::clone(&collector);
+        let local_config = Arc::clone(&config);
         let done = send_done.clone();
-        let u = url.clone();
         tokio::spawn(async move {
-            let mut sender = Sender::new(&u).expect("error creating sender");
-            sender.do_loop(coll.as_ref()).await;
+            let mut sender = Sender::new(local_config);
+            sender.do_loop(local_collector.as_ref()).await;
             done.send(true).unwrap();
         });
     }
