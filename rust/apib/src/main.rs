@@ -1,5 +1,6 @@
-use crate::{collector::Collector, config::Config, sender::Sender};
+use crate::{collector::Collector, sender::Sender};
 use clap::Parser;
+use config::Builder;
 use std::{
     sync::Arc,
     time::{Duration, SystemTime},
@@ -16,31 +17,52 @@ const TICK_DURATION: Duration = Duration::from_secs(5);
 
 #[derive(Parser, Debug)]
 struct Args {
-    #[arg(short)]
+    #[arg(short, help = "Verbose output for every HTTP request")]
     verbose: bool,
-    #[arg()]
+    #[arg(help = "The URL to test")]
     url: String,
-    #[arg(short = '1')]
+    #[arg(
+        short = 'X',
+        help = "HTTP method (default POST when body set, GET otherwise)"
+    )]
+    method: Option<String>,
+    #[arg(short = '1', help = "Send only one request and exit")]
     just_one: bool,
-    #[arg(short, default_value = "1")]
+    #[arg(
+        short,
+        default_value = "1",
+        help = "Number of concurrent requests to send"
+    )]
     concurrency: u16,
-    #[arg(short, default_value = "30")]
+    #[arg(short, default_value = "30", help = "Duration of test run")]
     duration: u16,
+    #[arg(short = 't', help = "Data to send in HTTP body")]
+    body_text: Option<String>,
+    #[arg(short = 'T', help = "File to read HTTP body from")]
+    body_file: Option<String>,
 }
 
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
-    let mut raw_config = match Config::new(&args.url) {
-        Ok(cfg) => cfg,
+    let mut builder = Builder::new().set_url(&args.url).set_verbose(args.verbose);
+    if let Some(m) = &args.method {
+        builder = builder.set_method(m);
+    }
+    if let Some(bt) = &args.body_text {
+        builder = builder.set_body_text(bt);
+    }
+    if let Some(bf) = &args.body_file {
+        builder = builder.set_body_file(bf);
+    }
+    let config = match builder.build().await {
+        Ok(cfg) => Arc::new(cfg),
         Err(e) => {
             println!("Invalid configuration: {}", e);
             return;
         }
     };
-    raw_config.set_verbose(args.verbose);
 
-    let config = Arc::new(raw_config);
     let collector = Arc::new(Collector::new());
     let mut sender = Sender::new(Arc::clone(&config));
 

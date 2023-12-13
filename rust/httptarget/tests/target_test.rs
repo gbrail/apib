@@ -16,6 +16,26 @@ async fn test_get() {
 }
 
 #[tokio::test]
+async fn test_echo() {
+    let svr = Builder::new()
+        .use_localhost(true)
+        .build()
+        .await
+        .expect("Error starting server");
+    let url = format!("http://{}/echo", svr.address());
+    let client = reqwest::Client::new();
+    let response = client
+        .post(url)
+        .body("Testing 1, 2, 3!")
+        .send()
+        .await
+        .expect("Error getting response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.text().await.expect("Error getting body");
+    assert_eq!(body, "Testing 1, 2, 3!");
+}
+
+#[tokio::test]
 async fn test_not_found() {
     let svr = Builder::new()
         .use_localhost(true)

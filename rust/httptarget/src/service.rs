@@ -5,7 +5,7 @@ use hyper::{
 };
 
 pub(crate) async fn handle(
-    req: Request<Incoming>,
+    mut req: Request<Incoming>,
 ) -> Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error> {
     match req.uri().path() {
         "/" => match req.method() {
@@ -18,6 +18,10 @@ pub(crate) async fn handle(
         },
         "/hello" => match req.method() {
             &Method::GET => Ok(hello()),
+            _ => Ok(error(StatusCode::METHOD_NOT_ALLOWED)),
+        },
+        "/echo" => match req.method() {
+            &Method::POST => echo(&mut req).await,
             _ => Ok(error(StatusCode::METHOD_NOT_ALLOWED)),
         },
         _ => Ok(error(StatusCode::NOT_FOUND)),
@@ -37,6 +41,17 @@ fn help() -> Response<BoxBody<Bytes, hyper::Error>> {
 
 fn hello() -> Response<BoxBody<Bytes, hyper::Error>> {
     full("Hello, World!")
+}
+
+async fn echo(
+    req: &mut Request<Incoming>,
+) -> Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error> {
+    let body_buf = req.body_mut().collect().await?;
+    Ok(Response::new(
+        Full::new(body_buf.to_bytes())
+            .map_err(|never| match never {})
+            .boxed(),
+    ))
 }
 
 fn error(code: StatusCode) -> Response<BoxBody<Bytes, hyper::Error>> {

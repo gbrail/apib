@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 
 #[derive(Clone, Debug)]
 pub enum Error {
+    Configuration(String),
     Http(u16),
     IO(String),
     InvalidURL(String),
@@ -12,6 +13,7 @@ impl std::error::Error for Error {}
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            Error::Configuration(msg) => f.write_fmt(format_args!("Configuration error: {}", msg)),
             Error::Http(status) => f.write_fmt(format_args!("HTTP status {}", status)),
             Error::IO(msg) => f.write_fmt(format_args!("HTTP error: {}", msg)),
             Error::InvalidURL(msg) => f.write_fmt(format_args!("Invalid URL: {}", msg)),

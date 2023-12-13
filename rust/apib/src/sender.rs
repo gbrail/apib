@@ -3,8 +3,9 @@ use crate::{
     config::Config,
     error::Error,
 };
-use http_body_util::BodyExt;
+use http_body_util::{BodyExt, Full};
 use hyper::{
+    body::Bytes,
     client::conn::http1::{self, SendRequest},
     Request,
 };
@@ -22,7 +23,8 @@ const USER_AGENT: &str = "apib";
 
 pub struct Sender {
     config: Arc<Config>,
-    sender: Option<SendRequest<String>>,
+    sender: Option<SendRequest<Full<Bytes>>>,
+    request: Option<Request<Full<Bytes>>>,
     verbose: bool,
 }
 
@@ -32,13 +34,14 @@ impl Sender {
         Self {
             config,
             sender: None,
+            request: None,
             verbose,
         }
     }
 
     async fn start_connection<T: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
         conn: T,
-    ) -> Result<SendRequest<String>, Error> {
+    ) -> Result<SendRequest<Full<Bytes>>, Error> {
         let io = TokioIo::new(conn);
         let (sender, conn_driver) = http1::handshake(io).await?;
         tokio::spawn(async move {
@@ -92,12 +95,19 @@ impl Sender {
             self.sender.take().unwrap()
         };
 
-        let request = Request::builder()
-            .uri(self.config.path.as_str())
-            .header("Host", self.config.host_hdr.as_str())
-            .header("User-Agent", USER_AGENT)
-            .body("".to_string())?;
-
+        let request = match &self.request {
+            Some(r) => r.clone(),
+            None => {
+                let new_req = Request::builder()
+                    .uri(self.config.path.as_str())
+                    .method(&self.config.method)
+                    .header("Host", self.config.host_hdr.as_str())
+                    .header("User-Agent", USER_AGENT)
+                    .body(Full::new(self.config.body.clone()))?;
+                self.request = Some(new_req.clone());
+                new_req
+            }
+        };
         if self.verbose {
             println!("{:?}", request);
         }
