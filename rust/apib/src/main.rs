@@ -66,6 +66,7 @@ async fn main() {
     let collector = Arc::new(Collector::new());
     let mut sender = Sender::new(Arc::clone(&config));
 
+    // If the "-1" argument was used, just send one and exit.
     if args.just_one {
         if let Err(e) = sender.send().await {
             println!("Error on send: {}", e);
@@ -77,6 +78,9 @@ async fn main() {
     let start_time = SystemTime::now();
     let test_duration = Duration::from_secs(args.duration as u64);
 
+    // Spawn an async task based on the concurrency level. Each task will run
+    // until the collector tells it to stop, and then send a message on
+    // the channel.
     for _ in 0..args.concurrency {
         let local_collector = Arc::clone(&collector);
         let local_config = Arc::clone(&config);
@@ -88,6 +92,8 @@ async fn main() {
         });
     }
 
+    // Spawn the task that will periodically print the progress of the test
+    // run. This is currently every five seconds.
     let tick_coll = Arc::clone(&collector);
     tokio::spawn(async move {
         while !tick_coll.stopped() {
@@ -97,10 +103,17 @@ async fn main() {
         }
     });
 
+    // Wait for the planned duration of the test run.
     tokio::time::sleep(test_duration).await;
+
+    // Stop, and wait for each test task to send a message indicating that
+    // it is done.
     collector.stop();
+    let stop_time = SystemTime::now();
     for _ in 0..args.concurrency {
         recv_done.recv().await.unwrap();
     }
-    collector.write(start_time, SystemTime::now());
+    
+    // Statistics from each test task are done so write them all out here.
+    collector.write(start_time, stop_time);
 }
