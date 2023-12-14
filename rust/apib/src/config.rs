@@ -13,6 +13,7 @@ pub struct Config {
     pub(crate) path: String,
     pub(crate) method: Method,
     pub(crate) body: Bytes,
+    pub(crate) headers: Vec<(String, String)>,
     pub(crate) tls: Option<Arc<ClientConfig>>,
     pub(crate) verbose: bool,
 }
@@ -23,20 +24,10 @@ pub struct Builder {
     method: Option<String>,
     body_text: Option<String>,
     body_file: Option<String>,
+    headers: Vec<(String, String)>,
+    tls_no_verify: bool,
     verbose: bool,
 }
-
-/*
- * TODO:
- * * Headers (support multiple instances)
- * * Warm-up time
- * * TLS verification on and off
- * * CSV output and title
- * * More output data
- * * Number formatting on output
- * * HTTP/2 on and off in various ways
- * * HTTP/2 streaming options
- */
 
 impl Builder {
     pub fn new() -> Self {
@@ -60,6 +51,16 @@ impl Builder {
 
     pub fn set_body_file(mut self, f: &str) -> Self {
         self.body_file = Some(f.to_string());
+        self
+    }
+
+    pub fn add_header(mut self, name: &str, value: &str) -> Self {
+        self.headers.push((name.to_string(), value.to_string()));
+        self
+    }
+
+    pub fn set_tls_no_verify(mut self, nv: bool) -> Self {
+        self.tls_no_verify = nv;
         self
     }
 
@@ -130,10 +131,22 @@ impl Builder {
             }
         };
         let tls = if url.scheme() == "https" {
-            let cfg = rustls::ClientConfig::builder()
-                .dangerous()
-                .with_custom_certificate_verifier(Arc::new(NoCertificateVerification {}))
-                .with_no_client_auth();
+            let cfg = if self.tls_no_verify {
+                rustls::ClientConfig::builder()
+                    .dangerous()
+                    .with_custom_certificate_verifier(Arc::new(NoCertificateVerification {}))
+                    .with_no_client_auth()
+            } else {
+                let mut root_store = rustls::RootCertStore::empty();
+                for cert in
+                    rustls_native_certs::load_native_certs().expect("could not load platform certs")
+                {
+                    root_store.add(cert).expect("Error loading native cert");
+                }
+                rustls::ClientConfig::builder()
+                    .with_root_certificates(root_store)
+                    .with_no_client_auth()
+            };
             Some(Arc::new(cfg))
         } else {
             None
@@ -146,6 +159,7 @@ impl Builder {
             path,
             method,
             body,
+            headers: self.headers,
             tls,
             verbose: self.verbose,
         })

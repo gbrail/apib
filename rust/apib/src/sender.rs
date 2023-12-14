@@ -52,7 +52,8 @@ impl Sender {
         Ok(sender)
     }
 
-    pub async fn send(&mut self) -> Result<(), Error> {
+    pub async fn send(&mut self) -> Result<bool, Error> {
+        let mut connection_opened = false;
         let mut sender = if self.sender.is_none() {
             if self.verbose {
                 println!("Connecting to {}:{}...", self.config.host, self.config.port);
@@ -63,6 +64,7 @@ impl Sender {
             if self.verbose {
                 println!("Connected");
             }
+            connection_opened = true;
 
             if let Some(tls_config) = &self.config.tls {
                 if self.verbose {
@@ -98,12 +100,15 @@ impl Sender {
         let request = match &self.request {
             Some(r) => r.clone(),
             None => {
-                let new_req = Request::builder()
+                let mut req_builder = Request::builder()
                     .uri(self.config.path.as_str())
                     .method(&self.config.method)
                     .header("Host", self.config.host_hdr.as_str())
-                    .header("User-Agent", USER_AGENT)
-                    .body(Full::new(self.config.body.clone()))?;
+                    .header("User-Agent", USER_AGENT);
+                for (name, value) in &self.config.headers {
+                    req_builder = req_builder.header(name, value);
+                }
+                let new_req = req_builder.body(Full::new(self.config.body.clone()))?;
                 self.request = Some(new_req.clone());
                 new_req
             }
@@ -114,9 +119,17 @@ impl Sender {
 
         let mut response = sender.send_request(request).await?;
 
+        let should_close = if let Some(close_header) = response.headers().get("close") {
+            close_header == "close"
+        } else {
+            false
+        };
+
         if !response.status().is_success() {
             // We can re-use the connection now
-            self.sender = Some(sender);
+            if !should_close {
+                self.sender = Some(sender);
+            }
             return Err(Error::Http(response.status().as_u16()));
         }
         if self.verbose {
@@ -128,8 +141,10 @@ impl Sender {
         } else {
             while response.frame().await.is_some() {}
         }
-        self.sender = Some(sender);
-        Ok(())
+        if !should_close {
+            self.sender = Some(sender);
+        }
+        Ok(connection_opened)
     }
 
     pub async fn do_loop(&mut self, collector: &Collector) {
@@ -137,7 +152,10 @@ impl Sender {
         loop {
             let start = SystemTime::now();
             match self.send().await {
-                Ok(_) => {
+                Ok(connection_opened) => {
+                    if connection_opened {
+                        Collector::connection_opened(&mut local_stats);
+                    }
                     if collector.success(&mut local_stats, start, SystemTime::now(), 0, 0) {
                         break;
                     }

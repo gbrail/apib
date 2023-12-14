@@ -9,6 +9,7 @@ struct Stats {
     attempts: u32,
     successes: u32,
     failures: u32,
+    connections_opened: u32,
     bytes_sent: u64,
     bytes_received: u64,
     total_latency: Duration,
@@ -69,12 +70,17 @@ impl Collector {
         self.stopped()
     }
 
+    pub fn connection_opened(local: &mut LocalCollector) {
+        local.connection_opened();
+    }
+
     // Merge detailed local stats with the total set of stats across all tasks.
     pub fn collect(&self, mut local: LocalCollector) {
         let mut stats = self.stats.lock().unwrap();
         stats.attempts += local.stats.attempts;
         stats.successes += local.stats.successes;
         stats.failures += local.stats.failures;
+        stats.connections_opened += local.stats.connections_opened;
         stats.bytes_sent += local.stats.bytes_sent;
         stats.bytes_received += local.stats.bytes_received;
         stats.total_latency += local.stats.total_latency;
@@ -99,6 +105,7 @@ impl Collector {
             attempts: stats.attempts,
             successes: stats.successes,
             failures: stats.failures,
+            connections_opened: stats.connections_opened,
             throughput: get_throughput(stats.successes, &duration),
             latency_avg: get_avg_latency(stats.successes, &stats.total_latency),
             latency_pct,
@@ -199,6 +206,10 @@ impl LocalCollector {
         self.stats.attempts += 1;
         self.stats.failures += 1;
     }
+
+    fn connection_opened(&mut self) {
+        self.stats.connections_opened += 1;
+    }
 }
 
 #[derive(Default)]
@@ -207,6 +218,7 @@ pub struct Results {
     pub attempts: u32,
     pub successes: u32,
     pub failures: u32,
+    pub connections_opened: u32,
     pub throughput: f64,
     pub latency_avg: f64,
     pub latency_pct: Vec<f64>,
@@ -218,6 +230,7 @@ impl Results {
         println!("Attempted requests:  {}", self.attempts);
         println!("Successful requests: {}", self.successes);
         println!("Errors:              {}", self.failures);
+        println!("Connections opened:  {}", self.connections_opened);
         println!();
         println!(
             "Throughput:          {:.3} requests/second",
