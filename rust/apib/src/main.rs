@@ -34,8 +34,14 @@ struct Args {
         help = "Number of concurrent requests to send"
     )]
     concurrency: u16,
-    #[arg(short, default_value = "30", help = "Duration of test run")]
+    #[arg(short, default_value = "30", help = "Duration of test run in seconds")]
     duration: u16,
+    #[arg(
+        short,
+        default_value = "0",
+        help = "Warm-up time before test run, in seconds"
+    )]
+    warmup: u16,
     #[arg(short = 't', help = "Data to send in HTTP body")]
     body_text: Option<String>,
     #[arg(short = 'T', help = "File to read HTTP body from")]
@@ -75,8 +81,13 @@ async fn main() {
     }
 
     let (send_done, mut recv_done) = mpsc::unbounded_channel();
-    let start_time = SystemTime::now();
+    let mut start_time = SystemTime::now();
     let test_duration = Duration::from_secs(args.duration as u64);
+    let warmup_duration = Duration::from_secs(args.warmup as u64);
+    if !warmup_duration.is_zero() {
+        collector.set_warming_up(true);
+    }
+    let total_duration = test_duration + warmup_duration;
 
     // Spawn an async task based on the concurrency level. Each task will run
     // until the collector tells it to stop, and then send a message on
@@ -99,9 +110,16 @@ async fn main() {
         while !tick_coll.stopped() {
             let tick_start = SystemTime::now();
             tokio::time::sleep(TICK_DURATION).await;
-            tick_coll.write_tick(start_time, tick_start, test_duration);
+            tick_coll.write_tick(start_time, tick_start, total_duration);
         }
     });
+
+    // Do warmup time if we have to.
+    if !warmup_duration.is_zero() {
+        tokio::time::sleep(warmup_duration).await;
+        start_time = SystemTime::now();
+        collector.set_warming_up(false);
+    }
 
     // Wait for the planned duration of the test run.
     tokio::time::sleep(test_duration).await;
@@ -113,7 +131,8 @@ async fn main() {
     for _ in 0..args.concurrency {
         recv_done.recv().await.unwrap();
     }
-    
+
     // Statistics from each test task are done so write them all out here.
-    collector.write(start_time, stop_time);
+    let results = collector.get_results(start_time, stop_time);
+    results.write();
 }

@@ -138,8 +138,7 @@ impl Sender {
             let start = SystemTime::now();
             match self.send().await {
                 Ok(_) => {
-                    local_stats.success(start, 0, 0);
-                    if collector.success() {
+                    if collector.success(&mut local_stats, start, SystemTime::now(), 0, 0) {
                         break;
                     }
                 }
@@ -147,8 +146,7 @@ impl Sender {
                     if self.verbose {
                         println!("Error: {}", e);
                     }
-                    local_stats.failure();
-                    if collector.failure(e) {
+                    if collector.failure(&mut local_stats, e) {
                         break;
                     }
                 }
