@@ -1,17 +1,10 @@
-use crate::{collector::Collector, sender::Sender};
+use apib::{Builder, Collector, Sender};
 use clap::Parser;
-use config::Builder;
 use std::{
     sync::Arc,
     time::{Duration, SystemTime},
 };
 use tokio::sync::mpsc;
-
-mod collector;
-mod config;
-mod error;
-mod null_verifier;
-mod sender;
 
 const TICK_DURATION: Duration = Duration::from_secs(5);
 

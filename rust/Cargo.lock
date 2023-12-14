@@ -71,6 +71,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "http-body-util",
+ "httptarget",
  "hyper 1.0.1",
  "hyper-util",
  "pin-project-lite",
