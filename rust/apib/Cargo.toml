@@ -17,4 +17,9 @@ tokio-rustls = "0"
 url = "2"
 
 [dev-dependencies]
+criterion = { version = "0", features = ["async_tokio"] }
 httptarget = { path = "../httptarget" }
+
+[[bench]]
+name = "bench_test"
+harness = false
