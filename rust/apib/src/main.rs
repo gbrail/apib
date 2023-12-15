@@ -8,7 +8,6 @@ use tokio::sync::mpsc;
 
 /*
  * TODO:
- * * Handle "close" header by closing connection (rather than just handle an error)
  * * Use "openssl" crate to generate certs for HTTP target automatically, and for testing
  * * Params for closing connections on client side after a timeout or # requests
  * * Think time
@@ -75,6 +74,8 @@ struct Args {
         help = "Skip verification of TLS certificates"
     )]
     skip_tls_verify: bool,
+    #[arg(short = '2', long = "http2", help = "Force HTTP/2 connection")]
+    http2: bool,
 }
 
 #[tokio::main]
@@ -83,7 +84,8 @@ async fn main() {
     let mut builder = Builder::new()
         .set_url(&args.url)
         .set_verbose(args.verbose)
-        .set_tls_no_verify(args.skip_tls_verify);
+        .set_tls_no_verify(args.skip_tls_verify)
+        .set_http2(args.http2);
     if let Some(m) = &args.method {
         builder = builder.set_method(m);
     }

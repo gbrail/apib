@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+async-trait = "0"
 clap = { version = "4", features = ["derive"] }
 http-body-util = "0"
-hyper = { version = "1", features = ["http1", "client"]}
+hyper = { version = "1", features = ["http1", "http2", "client"]}
 hyper-util = { version = "0", features = ["full"] }
 rustls = "0"
 rustls-native-certs = "0"

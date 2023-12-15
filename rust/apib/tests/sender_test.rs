@@ -25,6 +25,23 @@ async fn test_get() {
 }
 
 #[tokio::test]
+async fn test_get_http2_forced() {
+    let mut target = make_target().await;
+    let address = target.address();
+    let config = Arc::new(
+        Builder::new()
+            .set_url(&format!("http://127.0.0.1:{}/hello", address.port()))
+            .set_http2(true)
+            .build()
+            .await
+            .expect("Error building config"),
+    );
+    let mut sender = Sender::new(config);
+    sender.send().await.expect("Expected no error");
+    target.stop();
+}
+
+#[tokio::test]
 async fn test_post() {
     let mut target = make_target().await;
     let address = target.address();

@@ -5,6 +5,13 @@ use std::{str::FromStr, sync::Arc};
 use tokio::fs;
 use url::Url;
 
+#[derive(Debug, Default, PartialEq)]
+pub(crate) enum HttpMode {
+    #[default]
+    Http1,
+    Http2,
+}
+
 #[derive(Debug)]
 pub struct Config {
     pub(crate) host: String,
@@ -15,6 +22,7 @@ pub struct Config {
     pub(crate) body: Bytes,
     pub(crate) headers: Vec<(String, String)>,
     pub(crate) tls: Option<Arc<ClientConfig>>,
+    pub(crate) http_mode: HttpMode,
     pub(crate) verbose: bool,
 }
 
@@ -26,6 +34,7 @@ pub struct Builder {
     body_file: Option<String>,
     headers: Vec<(String, String)>,
     tls_no_verify: bool,
+    http_mode: HttpMode,
     verbose: bool,
 }
 
@@ -61,6 +70,15 @@ impl Builder {
 
     pub fn set_tls_no_verify(mut self, nv: bool) -> Self {
         self.tls_no_verify = nv;
+        self
+    }
+
+    pub fn set_http2(mut self, http2: bool) -> Self {
+        self.http_mode = if http2 {
+            HttpMode::Http2
+        } else {
+            HttpMode::Http1
+        };
         self
     }
 
@@ -161,6 +179,7 @@ impl Builder {
             body,
             headers: self.headers,
             tls,
+            http_mode: self.http_mode,
             verbose: self.verbose,
         })
     }
