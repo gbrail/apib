@@ -22,7 +22,6 @@ pub struct Config {
     pub(crate) body: Bytes,
     pub(crate) headers: Vec<(String, String)>,
     pub(crate) tls: Option<Arc<ClientConfig>>,
-    pub(crate) http_mode: HttpMode,
     pub(crate) verbose: bool,
 }
 
@@ -179,7 +178,6 @@ impl Builder {
             body,
             headers: self.headers,
             tls,
-            http_mode: self.http_mode,
             verbose: self.verbose,
         })
     }

@@ -1,126 +1,42 @@
 use crate::{
     collector::{Collector, LocalCollector},
-    config::{Config, HttpMode},
+    config::Config,
+    connector::{Connection, Http1Connection, Http2Connection},
     error::Error,
 };
-use async_trait::async_trait;
 use http_body_util::{BodyExt, Full};
-use hyper::{
-    body::{Body, Bytes, Incoming},
-    client::conn::{http1, http2},
-    Request, Response,
-};
-use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper::{body::Bytes, Request};
 use rustls_pki_types::ServerName;
 use std::{sync::Arc, time::SystemTime};
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    net::TcpStream,
-};
+use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 
-//const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 const USER_AGENT: &str = "apib";
 
-/*
- * This next complexity is necessary because Hyper doesn't have a common
- * trait between HTTP/1 and HTTP/2 senders, and we don't want to go totally
- * trait-crazy just yet. Maybe object-oriented programming wasn't the evil
- * thing that the cool kids say today.
- */
-#[async_trait]
-trait Holder<B> {
-    async fn send_request(&mut self, req: Request<B>) -> hyper::Result<Response<Incoming>>;
-}
-
-struct Http1Holder<B> {
-    sender: http1::SendRequest<B>,
-}
-
-impl<B> Http1Holder<B> {
-    fn new(sender: http1::SendRequest<B>) -> Self {
-        Http1Holder { sender }
-    }
-}
-
-#[async_trait]
-impl<B> Holder<B> for Http1Holder<B>
-where
-    B: Body + Send + 'static,
-{
-    async fn send_request(&mut self, req: Request<B>) -> hyper::Result<Response<Incoming>> {
-        self.sender.send_request(req).await
-    }
-}
-
-struct Http2Holder<B> {
-    sender: http2::SendRequest<B>,
-}
-
-impl<B> Http2Holder<B> {
-    fn new(sender: http2::SendRequest<B>) -> Self {
-        Http2Holder { sender }
-    }
-}
-
-#[async_trait]
-impl<B> Holder<B> for Http2Holder<B>
-where
-    B: Body + Send + 'static,
-{
-    async fn send_request(&mut self, req: Request<B>) -> hyper::Result<Response<Incoming>> {
-        self.sender.send_request(req).await
-    }
-}
-
-pub struct Sender {
+pub struct Sender<C> {
     config: Arc<Config>,
-    sender: Option<Box<dyn Holder<Full<Bytes>> + Send + Sync>>,
+    connection: C,
     request: Option<Request<Full<Bytes>>>,
     verbose: bool,
 }
 
-impl Sender {
-    pub fn new(config: Arc<Config>) -> Self {
+impl<C> Sender<C>
+where
+    C: Connection,
+{
+    pub fn new(config: Arc<Config>, connection: C) -> Self {
         let verbose = config.verbose;
         Self {
             config,
-            sender: None,
+            connection,
             request: None,
             verbose,
         }
     }
 
-    async fn start_connection<T: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
-        &self,
-        conn: T,
-    ) -> Result<Box<dyn Holder<Full<Bytes>> + Send + Sync>, Error> {
-        let io = TokioIo::new(conn);
-        match self.config.http_mode {
-            HttpMode::Http1 => {
-                let (sender, conn_driver) = http1::handshake(io).await?;
-                tokio::spawn(async move {
-                    if let Err(e) = conn_driver.await {
-                        println!("Error processing connection: {}", e);
-                    }
-                });
-                Ok(Box::new(Http1Holder::new(sender)))
-            }
-            HttpMode::Http2 => {
-                let (sender, conn_driver) = http2::handshake(TokioExecutor::new(), io).await?;
-                tokio::spawn(async move {
-                    if let Err(e) = conn_driver.await {
-                        println!("Error processing connection: {}", e);
-                    }
-                });
-                Ok(Box::new(Http2Holder::new(sender)))
-            }
-        }
-    }
-
     pub async fn send(&mut self) -> Result<bool, Error> {
         let mut connection_opened = false;
-        let mut holder = if self.sender.is_none() {
+        if !self.connection.connected() {
             if self.verbose {
                 println!("Connecting to {}:{}...", self.config.host, self.config.port);
             }
@@ -154,14 +70,11 @@ impl Sender {
                         println!("Cipher: {:?}", cs);
                     }
                 }
-                self.start_connection(tls_conn).await?
+                self.connection.connect(tls_conn).await?
             } else {
-                self.start_connection(new_conn).await?
+                self.connection.connect(new_conn).await?
             }
-        } else {
-            // Take the sender saved on this object -- we'll put it back on success.
-            self.sender.take().unwrap()
-        };
+        }
 
         let request = match &self.request {
             Some(r) => r.clone(),
@@ -183,19 +96,22 @@ impl Sender {
             println!("{:?}", request);
         }
 
-        let mut response = holder.send_request(request).await?;
-
-        let should_close = if let Some(close_header) = response.headers().get("close") {
-            close_header == "close"
-        } else {
-            false
+        let mut response = match self.connection.send_request(request).await {
+            Ok(r) => r,
+            Err(e) => {
+                self.connection.disconnect();
+                return Err(e);
+            }
         };
 
-        if !response.status().is_success() {
-            // We can re-use the connection now
-            if !should_close {
-                self.sender = Some(holder);
+        if let Some(close_header) = response.headers().get("close") {
+            if close_header == "close" {
+                self.connection.disconnect();
             }
+        }
+
+        if !response.status().is_success() {
+            //  Don't deliberately disconnect now
             return Err(Error::Http(response.status().as_u16()));
         }
         if self.verbose {
@@ -206,9 +122,6 @@ impl Sender {
             println!("\n{:?}", body_buf);
         } else {
             while response.frame().await.is_some() {}
-        }
-        if !should_close {
-            self.sender = Some(holder);
         }
         Ok(connection_opened)
     }
@@ -237,5 +150,53 @@ impl Sender {
             }
         }
         collector.collect(local_stats);
+    }
+}
+
+/*
+ * See the "connector" module for why http1 and http2 need to have separate
+ * implementations, but since they do, this lets us write a generic "main" or
+ * test program that dispatches to a type-specific implementation of the "Sender".
+ * We do all this to avoid "Box" and "dyn" because this is a performance test
+ * program.
+ */
+pub struct SendWrapper {
+    http1_sender: Option<Sender<Http1Connection>>,
+    http2_sender: Option<Sender<Http2Connection>>,
+}
+
+impl SendWrapper {
+    pub fn new(config: Arc<Config>, http2: bool) -> Self {
+        if http2 {
+            Self {
+                http1_sender: None,
+                http2_sender: Some(Sender::new(config, Http2Connection::new())),
+            }
+        } else {
+            Self {
+                http1_sender: Some(Sender::new(config, Http1Connection::new())),
+                http2_sender: None,
+            }
+        }
+    }
+
+    pub async fn send(&mut self) -> Result<bool, Error> {
+        if let Some(http1) = self.http1_sender.as_mut() {
+            http1.send().await
+        } else if let Some(http2) = self.http2_sender.as_mut() {
+            http2.send().await
+        } else {
+            panic!("Can't get here")
+        }
+    }
+
+    pub async fn do_loop(&mut self, collector: &Collector) {
+        if let Some(http1) = self.http1_sender.as_mut() {
+            http1.do_loop(collector).await
+        } else if let Some(http2) = self.http2_sender.as_mut() {
+            http2.do_loop(collector).await
+        } else {
+            panic!("Can't get here")
+        }
     }
 }

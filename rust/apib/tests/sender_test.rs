@@ -1,4 +1,4 @@
-use apib::{Builder, Collector, Sender};
+use apib::{Builder, Collector, SendWrapper};
 use httptarget::Target;
 use std::{
     sync::Arc,
@@ -19,7 +19,7 @@ async fn test_get() {
             .await
             .expect("Error building config"),
     );
-    let mut sender = Sender::new(config);
+    let mut sender = SendWrapper::new(config, false);
     sender.send().await.expect("Expected no error");
     target.stop();
 }
@@ -36,7 +36,7 @@ async fn test_get_http2_forced() {
             .await
             .expect("Error building config"),
     );
-    let mut sender = Sender::new(config);
+    let mut sender = SendWrapper::new(config, true);
     sender.send().await.expect("Expected no error");
     target.stop();
 }
@@ -54,7 +54,7 @@ async fn test_post() {
             .await
             .expect("Error building config"),
     );
-    let mut sender = Sender::new(config);
+    let mut sender = SendWrapper::new(config, false);
     sender.send().await.expect("Expected no error");
     target.stop();
 }
@@ -70,7 +70,7 @@ async fn test_not_found() {
             .await
             .expect("Error building config"),
     );
-    let mut sender = Sender::new(config);
+    let mut sender = SendWrapper::new(config, false);
     assert!(sender.send().await.is_err());
     target.stop();
 }
@@ -96,7 +96,7 @@ async fn test_loops() {
         let config_copy = Arc::clone(&config);
         let done_copy = send.clone();
         tokio::spawn(async move {
-            let mut sender = Sender::new(config_copy);
+            let mut sender = SendWrapper::new(config_copy, false);
             sender.do_loop(collector_copy.as_ref()).await;
             done_copy.send(()).unwrap();
         });

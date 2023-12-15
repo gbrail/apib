@@ -1,4 +1,4 @@
-use apib::{Builder, Sender};
+use apib::{Builder, SendWrapper};
 use criterion::Criterion;
 use httptarget::Target;
 use std::sync::Arc;
@@ -26,7 +26,7 @@ fn bench_get(c: &mut Criterion) {
         b.to_async(&runtime).iter(|| {
             let config_copy = Arc::clone(&config);
             async move {
-                let mut sender = Sender::new(config_copy);
+                let mut sender = SendWrapper::new(config_copy, false);
                 for _ in 0..10000 {
                     sender.send().await.expect("Expected no error");
                 }
@@ -61,7 +61,7 @@ fn bench_echo(c: &mut Criterion) {
         b.to_async(&runtime).iter(|| {
             let config_copy = Arc::clone(&config);
             async move {
-                let mut sender = Sender::new(config_copy);
+                let mut sender = SendWrapper::new(config_copy, false);
                 for _ in 0..10000 {
                     sender.send().await.expect("Expected no error");
                 }
