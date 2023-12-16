@@ -26,10 +26,10 @@ async fn main() {
     let server = builder.build().await.expect("Error listening on port");
     println!("Listening on {}", server.address());
 
-    let mut hup = signal(SignalKind::hangup()).expect("Error making signal");
+    let mut interrupt = signal(SignalKind::interrupt()).expect("Error making signal");
     let mut term = signal(SignalKind::terminate()).expect("Error making signal");
     tokio::select! {
-        _ = hup.recv() => {}
+        _ = interrupt.recv() => {}
         _ = term.recv() => {}
     };
 
