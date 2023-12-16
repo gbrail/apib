@@ -1,78 +1,77 @@
-use apib::{Builder, SendWrapper};
+use apib::{new_sender, Builder, Config};
 use criterion::Criterion;
 use httptarget::Target;
 use std::sync::Arc;
+use tokio::runtime::Runtime;
 
-fn bench_get(c: &mut Criterion) {
+fn benchmarks(c: &mut Criterion) {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .expect("Tokio failed to initialize");
 
-    let (config, mut target) = runtime.block_on(async {
-        let target = make_target().await;
-        let address = target.address();
-        let config = Arc::new(
+    let mut target = runtime.block_on(async { make_target().await });
+    let address = target.address();
+
+    let config_http_get = runtime.block_on(async {
+        Arc::new(
             Builder::new()
                 .set_url(&format!("http://127.0.0.1:{}/hello", address.port()))
                 .build()
                 .await
                 .expect("Error building config"),
-        );
-        (config, target)
+        )
     });
+    run_benchmark(c, &runtime, "GET http 1", false, config_http_get);
 
-    c.bench_function("get hello 100", |b| {
-        b.to_async(&runtime).iter(|| {
-            let config_copy = Arc::clone(&config);
-            async move {
-                let mut sender = SendWrapper::new(config_copy, false);
-                for _ in 0..10000 {
-                    sender.send().await.expect("Expected no error");
-                }
-            }
-        })
+    let config_http_get_2 = runtime.block_on(async {
+        Arc::new(
+            Builder::new()
+                .set_url(&format!("http://127.0.0.1:{}/hello", address.port()))
+                .set_http2(true)
+                .build()
+                .await
+                .expect("Error building config"),
+        )
     });
+    run_benchmark(c, &runtime, "GET http 2", true, config_http_get_2);
 
-    target.stop();
-}
-
-fn bench_echo(c: &mut Criterion) {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("Tokio failed to initialize");
-
-    let (config, mut target) = runtime.block_on(async {
-        let target = make_target().await;
-        let address = target.address();
-        let config = Arc::new(
+    let config_http_echo = runtime.block_on(async {
+        Arc::new(
             Builder::new()
                 .set_url(&format!("http://127.0.0.1:{}/echo", address.port()))
                 .set_body_text("Hello, World!")
                 .build()
                 .await
                 .expect("Error building config"),
-        );
-        (config, target)
+        )
     });
+    run_benchmark(c, &runtime, "POST http 1", false, config_http_echo);
 
-    c.bench_function("post echo 100", |b| {
-        b.to_async(&runtime).iter(|| {
+    target.stop();
+}
+
+fn run_benchmark(
+    c: &mut Criterion,
+    runtime: &Runtime,
+    name: &str,
+    http2: bool,
+    config: Arc<Config>,
+) {
+    c.bench_function(name, |b| {
+        b.to_async(runtime).iter(|| {
             let config_copy = Arc::clone(&config);
             async move {
-                let mut sender = SendWrapper::new(config_copy, false);
-                for _ in 0..10000 {
+                let mut sender = new_sender(config_copy, http2);
+                for _ in 0..1000 {
                     sender.send().await.expect("Expected no error");
                 }
             }
         })
     });
-
-    target.stop();
 }
 
-criterion::criterion_group!(benches, bench_get, bench_echo);
+criterion::criterion_group!(benches, benchmarks);
 criterion::criterion_main!(benches);
 
 async fn make_target() -> Target {

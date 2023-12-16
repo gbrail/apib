@@ -4,6 +4,7 @@ use crate::{
     connector::{Connection, Http1Connection, Http2Connection},
     error::Error,
 };
+use async_trait::async_trait;
 use http_body_util::{BodyExt, Full};
 use hyper::{body::Bytes, Request};
 use rustls_pki_types::ServerName;
@@ -13,16 +14,22 @@ use tokio_rustls::TlsConnector;
 
 const USER_AGENT: &str = "apib";
 
-pub struct Sender<C> {
+#[async_trait]
+pub trait Sender {
+    async fn send(&mut self) -> Result<bool, Error>;
+    async fn do_loop(&mut self, collector: &Collector);
+}
+
+struct SenderImpl<C> {
     config: Arc<Config>,
     connection: C,
     request: Option<Request<Full<Bytes>>>,
     verbose: bool,
 }
 
-impl<C> Sender<C>
+impl<C> SenderImpl<C>
 where
-    C: Connection,
+    C: Connection + Send,
 {
     pub fn new(config: Arc<Config>, connection: C) -> Self {
         let verbose = config.verbose;
@@ -33,8 +40,14 @@ where
             verbose,
         }
     }
+}
 
-    pub async fn send(&mut self) -> Result<bool, Error> {
+#[async_trait]
+impl<C> Sender for SenderImpl<C>
+where
+    C: Connection + Send,
+{
+    async fn send(&mut self) -> Result<bool, Error> {
         let mut connection_opened = false;
         if !self.connection.connected() {
             if self.verbose {
@@ -126,7 +139,7 @@ where
         Ok(connection_opened)
     }
 
-    pub async fn do_loop(&mut self, collector: &Collector) {
+    async fn do_loop(&mut self, collector: &Collector) {
         let mut local_stats = LocalCollector::new();
         loop {
             let start = SystemTime::now();
@@ -153,50 +166,13 @@ where
     }
 }
 
-/*
- * See the "connector" module for why http1 and http2 need to have separate
- * implementations, but since they do, this lets us write a generic "main" or
- * test program that dispatches to a type-specific implementation of the "Sender".
- * We do all this to avoid "Box" and "dyn" because this is a performance test
- * program.
- */
-pub struct SendWrapper {
-    http1_sender: Option<Sender<Http1Connection>>,
-    http2_sender: Option<Sender<Http2Connection>>,
-}
-
-impl SendWrapper {
-    pub fn new(config: Arc<Config>, http2: bool) -> Self {
-        if http2 {
-            Self {
-                http1_sender: None,
-                http2_sender: Some(Sender::new(config, Http2Connection::new())),
-            }
-        } else {
-            Self {
-                http1_sender: Some(Sender::new(config, Http1Connection::new())),
-                http2_sender: None,
-            }
-        }
-    }
-
-    pub async fn send(&mut self) -> Result<bool, Error> {
-        if let Some(http1) = self.http1_sender.as_mut() {
-            http1.send().await
-        } else if let Some(http2) = self.http2_sender.as_mut() {
-            http2.send().await
-        } else {
-            panic!("Can't get here")
-        }
-    }
-
-    pub async fn do_loop(&mut self, collector: &Collector) {
-        if let Some(http1) = self.http1_sender.as_mut() {
-            http1.do_loop(collector).await
-        } else if let Some(http2) = self.http2_sender.as_mut() {
-            http2.do_loop(collector).await
-        } else {
-            panic!("Can't get here")
-        }
+// Create a new sender. HTTP/1 and 2 use different implementations, and
+// there are a bunch of trait-related things that happen in the background,
+// so this function abstracts that away.
+pub fn new_sender(config: Arc<Config>, http2: bool) -> Box<dyn Sender + Send> {
+    if http2 {
+        Box::new(SenderImpl::new(config, Http2Connection::new()))
+    } else {
+        Box::new(SenderImpl::new(config, Http1Connection::new()))
     }
 }

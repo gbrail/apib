@@ -1,6 +1,6 @@
 pub use collector::Collector;
 pub use config::{Builder, Config};
-pub use sender::{SendWrapper, Sender};
+pub use sender::{new_sender, Sender};
 
 mod collector;
 mod config;

@@ -16,7 +16,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
  * avoiding one "Box<dyn whatever>" can save a few percent of CPU usage, so we do it.
  */
 #[async_trait]
-pub trait Connection {
+pub(crate) trait Connection {
     // Return whether "connect" was called and it worked
     fn connected(&self) -> bool;
     // Connect on some Tokio-compatible network interface
@@ -34,7 +34,7 @@ pub trait Connection {
 }
 
 #[derive(Default)]
-pub struct Http1Connection {
+pub(crate) struct Http1Connection {
     sender: Option<http1::SendRequest<Full<Bytes>>>,
 }
 
@@ -79,7 +79,7 @@ impl Connection for Http1Connection {
 }
 
 #[derive(Default)]
-pub struct Http2Connection {
+pub(crate) struct Http2Connection {
     sender: Option<http2::SendRequest<Full<Bytes>>>,
 }
 
