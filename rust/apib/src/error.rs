@@ -44,3 +44,15 @@ impl From<hyper::http::Error> for Error {
         Error::IO(err.to_string())
     }
 }
+
+impl From<hyper::header::InvalidHeaderValue> for Error {
+    fn from(err: hyper::header::InvalidHeaderValue) -> Self {
+        Error::Configuration(err.to_string())
+    }
+}
+
+impl From<hyper::header::InvalidHeaderName> for Error {
+    fn from(err: hyper::header::InvalidHeaderName) -> Self {
+        Error::Configuration(err.to_string())
+    }
+}

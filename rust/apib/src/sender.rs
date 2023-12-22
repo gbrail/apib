@@ -6,7 +6,11 @@ use crate::{
 };
 use async_trait::async_trait;
 use http_body_util::{BodyExt, Full};
-use hyper::{body::Bytes, Request};
+use hyper::{
+    body::Bytes,
+    header::{self, HeaderName, HeaderValue},
+    Request,
+};
 use rustls_pki_types::ServerName;
 use std::{sync::Arc, time::SystemTime};
 use tokio::net::TcpStream;
@@ -95,11 +99,21 @@ where
                 let mut req_builder = Request::builder()
                     .uri(self.config.path.as_str())
                     .method(&self.config.method)
-                    .header("Host", self.config.host_hdr.as_str())
-                    .header("User-Agent", USER_AGENT);
-                for (name, value) in &self.config.headers {
-                    req_builder = req_builder.header(name, value);
+                    .header(header::HOST, self.config.host_hdr.as_str())
+                    .header(header::USER_AGENT, USER_AGENT);
+                let headers = req_builder.headers_mut().unwrap();
+                for (n, v) in &self.config.headers {
+                    // Explicitly control which headers must be appended and which
+                    // may see multiple values
+                    let name = HeaderName::from_bytes(n.as_bytes())?;
+                    let val = HeaderValue::from_str(v)?;
+                    if name == header::HOST || name == header::USER_AGENT {
+                        headers.insert(name, val);
+                    } else {
+                        headers.append(name, val);
+                    }
                 }
+
                 let new_req = req_builder.body(Full::new(self.config.body.clone()))?;
                 self.request = Some(new_req.clone());
                 new_req
