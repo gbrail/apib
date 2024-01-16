@@ -17,6 +17,10 @@ tokio = { version = "1", features = ["rt-multi-thread", "fs", "net", "macros", "
 tokio-rustls = "0"
 url = "2"
 
+# Only for download so that we can work on the airplane!
+cursive = "0"
+ncurses = "5"
+
 [dev-dependencies]
 criterion = { version = "0", features = ["async_tokio"] }
 httptarget = { path = "../httptarget" }
