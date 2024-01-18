@@ -10,7 +10,7 @@ const TEST_DURATION: Duration = Duration::from_millis(500);
 
 #[tokio::test]
 async fn test_get() {
-    let mut target = make_target().await;
+    let mut target = make_target(false).await;
     let address = target.address();
     let config = Arc::new(
         Builder::new()
@@ -25,8 +25,25 @@ async fn test_get() {
 }
 
 #[tokio::test]
+async fn test_get_https() {
+    let mut target = make_target(true).await;
+    let address = target.address();
+    let config = Arc::new(
+        Builder::new()
+            .set_url(&format!("https://127.0.0.1:{}/hello", address.port()))
+            .set_tls_no_verify(true)
+            .build()
+            .await
+            .expect("Error building config"),
+    );
+    let mut sender = new_sender(config, false);
+    sender.send().await.expect("Expected no error");
+    target.stop();
+}
+
+#[tokio::test]
 async fn test_get_http2_forced() {
-    let mut target = make_target().await;
+    let mut target = make_target(false).await;
     let address = target.address();
     let config = Arc::new(
         Builder::new()
@@ -43,7 +60,7 @@ async fn test_get_http2_forced() {
 
 #[tokio::test]
 async fn test_post() {
-    let mut target = make_target().await;
+    let mut target = make_target(false).await;
     let address = target.address();
     let config = Arc::new(
         Builder::new()
@@ -61,7 +78,7 @@ async fn test_post() {
 
 #[tokio::test]
 async fn test_not_found() {
-    let mut target = make_target().await;
+    let mut target = make_target(false).await;
     let address = target.address();
     let config = Arc::new(
         Builder::new()
@@ -77,7 +94,7 @@ async fn test_not_found() {
 
 #[tokio::test]
 async fn test_loops() {
-    let mut target = make_target().await;
+    let mut target = make_target(false).await;
     let address = target.address();
     let config = Arc::new(
         Builder::new()
@@ -120,10 +137,11 @@ async fn test_loops() {
     assert!(results.latency_pct[0] <= results.latency_pct[100]);
 }
 
-async fn make_target() -> Target {
+async fn make_target(use_tls: bool) -> Target {
     httptarget::Builder::new()
         .port(0)
         .use_localhost(true)
+        .self_signed(use_tls)
         .build()
         .await
         .expect("Failed to create target")
