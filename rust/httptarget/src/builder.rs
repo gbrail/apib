@@ -6,6 +6,7 @@ pub struct Builder {
     pub(crate) use_localhost: bool,
     pub(crate) certificate: Option<String>,
     pub(crate) key: Option<String>,
+    pub(crate) self_signed: bool,
 }
 
 impl Builder {
@@ -33,7 +34,17 @@ impl Builder {
         self
     }
 
+    pub fn self_signed(mut self, ss: bool) -> Self {
+        self.self_signed = ss;
+        self
+    }
+
     pub async fn build(self) -> Result<Target, Error> {
+        if self.self_signed && (self.certificate.is_some() || self.key.is_some()) {
+            return Err(Error::Generic(
+                "Must use custom key and cert or self-signed, but not both".to_string(),
+            ));
+        }
         Target::new(self).await
     }
 }

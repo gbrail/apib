@@ -8,6 +8,7 @@ clap = { version = "4", features = ["derive"] }
 http-body-util = "0"
 hyper = { version = "1", features = ["http1", "http2", "server"]}
 hyper-util = { version = "0", features = ["full"] }
+makecert = { path = "../makecert" }
 rustls = "0"
 rustls-pemfile = "2"
 rustls-pki-types = "1"

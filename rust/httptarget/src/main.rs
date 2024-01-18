@@ -10,12 +10,17 @@ struct Args {
     certificate: Option<String>,
     #[arg(short)]
     key: Option<String>,
+    #[arg(short, default_value = "false")]
+    self_signed_certs: bool,
 }
 
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
     let mut builder = Builder::new().port(args.port);
+    if args.self_signed_certs {
+        builder = builder.self_signed(true);
+    }
     if let Some(cert) = args.certificate {
         builder = builder.certificate(&cert);
     }

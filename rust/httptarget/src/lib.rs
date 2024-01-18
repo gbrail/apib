@@ -39,11 +39,12 @@ impl Target {
         let actual_addr = listener.local_addr().expect("Error getting my address");
         let (sender, mut receiver) = oneshot::channel();
 
-        let tls_config = if builder.certificate.is_some() && builder.key.is_some() {
-            Some(Arc::new(make_server_config(&builder)?))
-        } else {
-            None
-        };
+        let tls_config =
+            if builder.self_signed || builder.certificate.is_some() || builder.key.is_some() {
+                Some(Arc::new(make_server_config(&builder)?))
+            } else {
+                None
+            };
 
         tokio::spawn(async move {
             loop {

@@ -81,6 +81,17 @@ pub fn write_certificate(cert: &X509) -> Result<String, Error> {
     }
 }
 
+/*
+ * Convenience method to create a key and cert and return the key and cert (in that order)
+ * as PEM-encoded strings.
+ */
+pub fn new_certificate_strings(valid_days: u32) -> Result<(String, String), Error> {
+    let (key, cert) = new_certificate(valid_days)?;
+    let key_pem = write_key(&key)?;
+    let cert_pem = write_certificate(&cert)?;
+    Ok((key_pem, cert_pem))
+}
+
 fn to_unix_time(t: &SystemTime) -> Result<Asn1Time, Error> {
     let unix_time = t
         .duration_since(SystemTime::UNIX_EPOCH)
