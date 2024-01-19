@@ -2,6 +2,7 @@ use crate::{
     collector::{Collector, LocalCollector},
     config::Config,
     connector::{Connection, Http1Connection, Http2Connection},
+    counting_connection::CountingConnection,
     error::Error,
 };
 use async_trait::async_trait;
@@ -21,11 +22,12 @@ const USER_AGENT: &str = "apib";
 #[async_trait]
 pub trait Sender {
     async fn send(&mut self) -> Result<bool, Error>;
-    async fn do_loop(&mut self, collector: &Collector);
+    async fn do_loop(&mut self);
 }
 
 struct SenderImpl<C> {
     config: Arc<Config>,
+    collector: Arc<Collector>,
     connection: C,
     request: Option<Request<Full<Bytes>>>,
     verbose: bool,
@@ -35,10 +37,11 @@ impl<C> SenderImpl<C>
 where
     C: Connection + Send,
 {
-    pub fn new(config: Arc<Config>, connection: C) -> Self {
+    pub fn new(config: Arc<Config>, collector: Arc<Collector>, connection: C) -> Self {
         let verbose = config.verbose;
         Self {
             config,
+            collector,
             connection,
             request: None,
             verbose,
@@ -57,9 +60,10 @@ where
             if self.verbose {
                 println!("Connecting to {}:{}...", self.config.host, self.config.port);
             }
-            let new_conn =
+            let tcp_conn =
                 TcpStream::connect((self.config.host.as_str(), self.config.port)).await?;
-            new_conn.set_nodelay(true)?;
+            tcp_conn.set_nodelay(true)?;
+            let new_conn = CountingConnection::new(tcp_conn, Arc::clone(&self.collector));
             if self.verbose {
                 println!("Connected");
             }
@@ -153,7 +157,7 @@ where
         Ok(connection_opened)
     }
 
-    async fn do_loop(&mut self, collector: &Collector) {
+    async fn do_loop(&mut self) {
         let mut local_stats = LocalCollector::new();
         loop {
             let start = SystemTime::now();
@@ -162,7 +166,10 @@ where
                     if connection_opened {
                         Collector::connection_opened(&mut local_stats);
                     }
-                    if collector.success(&mut local_stats, start, SystemTime::now(), 0, 0) {
+                    if self
+                        .collector
+                        .success(&mut local_stats, start, SystemTime::now())
+                    {
                         break;
                     }
                 }
@@ -170,23 +177,30 @@ where
                     if self.verbose {
                         println!("Error: {}", e);
                     }
-                    if collector.failure(&mut local_stats, e) {
+                    if self.collector.failure(&mut local_stats, e) {
                         break;
                     }
                 }
             }
         }
-        collector.collect(local_stats);
+        if self.connection.connected() {
+            self.connection.disconnect();
+        }
+        self.collector.collect(local_stats);
     }
 }
 
 // Create a new sender. HTTP/1 and 2 use different implementations, and
 // there are a bunch of trait-related things that happen in the background,
 // so this function abstracts that away.
-pub fn new_sender(config: Arc<Config>, http2: bool) -> Box<dyn Sender + Send> {
+pub fn new_sender(
+    config: Arc<Config>,
+    collector: Arc<Collector>,
+    http2: bool,
+) -> Box<dyn Sender + Send> {
     if http2 {
-        Box::new(SenderImpl::new(config, Http2Connection::new()))
+        Box::new(SenderImpl::new(config, collector, Http2Connection::new()))
     } else {
-        Box::new(SenderImpl::new(config, Http1Connection::new()))
+        Box::new(SenderImpl::new(config, collector, Http1Connection::new()))
     }
 }

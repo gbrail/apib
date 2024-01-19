@@ -8,11 +8,9 @@ use tokio::sync::mpsc;
 
 /*
  * TODO:
- * * Use "openssl" crate to generate certs for HTTP target automatically, and for testing
  * * Params for closing connections on client side after a timeout or # requests
  * * Think time
  * * CSV output and title
- * * HTTP/2 on and off in various ways
  * * HTTP/2 streaming options
  * * Track number of bytes
  */
@@ -111,7 +109,7 @@ async fn main() {
 
     // If the "-1" argument was used, just send one and exit.
     if args.just_one {
-        let mut sender = apib::new_sender(config, args.http2);
+        let mut sender = apib::new_sender(config, collector, args.http2);
         if let Err(e) = sender.send().await {
             println!("Error on send: {}", e);
         }
@@ -136,8 +134,8 @@ async fn main() {
         let local_config = Arc::clone(&config);
         let done = send_done.clone();
         tokio::spawn(async move {
-            let mut sender = apib::new_sender(local_config, args.http2);
-            sender.do_loop(local_collector.as_ref()).await;
+            let mut sender = apib::new_sender(local_config, local_collector, args.http2);
+            sender.do_loop().await;
             done.send(true).unwrap();
         });
     }

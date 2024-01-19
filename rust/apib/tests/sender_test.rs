@@ -19,7 +19,8 @@ async fn test_get() {
             .await
             .expect("Error building config"),
     );
-    let mut sender = new_sender(config, false);
+    let collector = Arc::new(Collector::new());
+    let mut sender = new_sender(config, collector, false);
     sender.send().await.expect("Expected no error");
     target.stop();
 }
@@ -36,7 +37,8 @@ async fn test_get_https() {
             .await
             .expect("Error building config"),
     );
-    let mut sender = new_sender(config, false);
+    let collector = Arc::new(Collector::new());
+    let mut sender = new_sender(config, collector, false);
     sender.send().await.expect("Expected no error");
     target.stop();
 }
@@ -53,7 +55,8 @@ async fn test_get_http2_forced() {
             .await
             .expect("Error building config"),
     );
-    let mut sender = new_sender(config, true);
+    let collector = Arc::new(Collector::new());
+    let mut sender = new_sender(config, collector, true);
     sender.send().await.expect("Expected no error");
     target.stop();
 }
@@ -71,7 +74,8 @@ async fn test_post() {
             .await
             .expect("Error building config"),
     );
-    let mut sender = new_sender(config, false);
+    let collector = Arc::new(Collector::new());
+    let mut sender = new_sender(config, collector, false);
     sender.send().await.expect("Expected no error");
     target.stop();
 }
@@ -87,7 +91,8 @@ async fn test_not_found() {
             .await
             .expect("Error building config"),
     );
-    let mut sender = new_sender(config, false);
+    let collector = Arc::new(Collector::new());
+    let mut sender = new_sender(config, collector, false);
     assert!(sender.send().await.is_err());
     target.stop();
 }
@@ -113,8 +118,8 @@ async fn test_loops() {
         let config_copy = Arc::clone(&config);
         let done_copy = send.clone();
         tokio::spawn(async move {
-            let mut sender = new_sender(config_copy, false);
-            sender.do_loop(collector_copy.as_ref()).await;
+            let mut sender = new_sender(config_copy, collector_copy, false);
+            sender.do_loop().await;
             done_copy.send(()).unwrap();
         });
     }
@@ -135,6 +140,8 @@ async fn test_loops() {
     assert!(results.throughput > 0.0);
     assert!(results.latency_avg > 0.0);
     assert!(results.latency_pct[0] <= results.latency_pct[100]);
+    assert!(results.bytes_sent > 0);
+    assert!(results.bytes_received > 0);
 }
 
 async fn make_target(use_tls: bool) -> Target {

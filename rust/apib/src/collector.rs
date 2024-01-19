@@ -4,6 +4,8 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
+const MEGABIT: f64 = 1024.0 * 1024.0 * 10.0;
+
 #[derive(Default)]
 struct Stats {
     attempts: u32,
@@ -43,17 +45,10 @@ impl Collector {
         self.stopped.load(Ordering::Relaxed)
     }
 
-    pub fn success(
-        &self,
-        local: &mut LocalCollector,
-        start: SystemTime,
-        end: SystemTime,
-        sent: u64,
-        received: u64,
-    ) -> bool {
+    pub fn success(&self, local: &mut LocalCollector, start: SystemTime, end: SystemTime) -> bool {
         self.interval_successes.fetch_add(1, Ordering::Relaxed);
         if !self.warming_up.load(Ordering::Relaxed) {
-            local.success(start, end, sent, received);
+            local.success(start, end);
         }
         self.stopped()
     }
@@ -87,6 +82,12 @@ impl Collector {
         stats.latencies.append(&mut local.stats.latencies);
     }
 
+    pub fn collect_connection(&self, bytes_sent: u64, bytes_received: u64) {
+        let mut stats = self.stats.lock().unwrap();
+        stats.bytes_sent += bytes_sent;
+        stats.bytes_received += bytes_received;
+    }
+
     pub fn get_results(&self, start: SystemTime, end: SystemTime) -> Results {
         let duration = end
             .duration_since(start)
@@ -109,6 +110,10 @@ impl Collector {
             throughput: get_throughput(stats.successes, &duration),
             latency_avg: get_avg_latency(stats.successes, &stats.total_latency),
             latency_pct,
+            bytes_sent: stats.bytes_sent,
+            send_rate: get_rate(stats.bytes_sent, &duration),
+            bytes_received: stats.bytes_received,
+            receive_rate: get_rate(stats.bytes_received, &duration),
         }
     }
 
@@ -165,6 +170,13 @@ fn get_throughput(successes: u32, duration: &Duration) -> f64 {
     successes as f64 / duration.as_secs_f64()
 }
 
+fn get_rate(bytes: u64, duration: &Duration) -> f64 {
+    if duration.is_zero() {
+        return 0.0;
+    }
+    bytes as f64 / MEGABIT / duration.as_secs_f64()
+}
+
 fn get_avg_latency(successes: u32, duration: &Duration) -> f64 {
     if successes == 0 {
         return 0.0;
@@ -190,14 +202,12 @@ impl LocalCollector {
         Default::default()
     }
 
-    fn success(&mut self, start: SystemTime, end: SystemTime, sent: u64, received: u64) {
+    fn success(&mut self, start: SystemTime, end: SystemTime) {
         let latency = end
             .duration_since(start)
             .expect("Error getting current time");
         self.stats.attempts += 1;
         self.stats.successes += 1;
-        self.stats.bytes_sent += sent;
-        self.stats.bytes_received += received;
         self.stats.total_latency += latency;
         self.stats.latencies.push(latency);
     }
@@ -222,6 +232,10 @@ pub struct Results {
     pub throughput: f64,
     pub latency_avg: f64,
     pub latency_pct: Vec<f64>,
+    pub bytes_sent: u64,
+    pub send_rate: f64,
+    pub bytes_received: u64,
+    pub receive_rate: f64,
 }
 
 impl Results {
@@ -261,6 +275,16 @@ impl Results {
             "99% latency:         {:.3} milliseconds",
             self.latency_pct[99]
         );
+        println!("Bytes Sent:          {} bytes", self.bytes_sent);
+        println!(
+            "Send rate:           {:.3} megabits / second",
+            self.send_rate
+        );
+        println!("Bytes Received:      {} bytes", self.bytes_received);
+        println!(
+            "Receive rate:        {:.3} megabits / second",
+            self.receive_rate
+        );
     }
 }
 
@@ -287,7 +311,7 @@ mod test {
         let start = SystemTime::now();
         let elapsed = Duration::from_millis(111);
         let end = start.checked_add(elapsed).expect("Error adding time");
-        assert_eq!(global.success(&mut local, start, end, 0, 0), false);
+        assert_eq!(global.success(&mut local, start, end), false);
         global.collect(local);
         let results = global.get_results(start, SystemTime::now());
         assert_eq!(results.successes, 1);
@@ -306,13 +330,13 @@ mod test {
         let start = SystemTime::now();
         let elapsed = Duration::from_millis(111);
         let end = start.checked_add(elapsed).expect("Error adding time");
-        assert_eq!(global.success(&mut local, start, end, 0, 0), false);
+        assert_eq!(global.success(&mut local, start, end), false);
         let elapsed2 = Duration::from_millis(222);
         let end2 = start.checked_add(elapsed2).expect("Error adding time");
-        assert_eq!(global.success(&mut local, start, end2, 0, 0), false);
+        assert_eq!(global.success(&mut local, start, end2), false);
         let elapsed3 = Duration::from_millis(33);
         let end3 = start.checked_add(elapsed3).expect("Error adding time");
-        assert_eq!(global.success(&mut local, start, end3, 0, 0), false);
+        assert_eq!(global.success(&mut local, start, end3), false);
         global.collect(local);
         let results = global.get_results(start, SystemTime::now());
         assert_eq!(results.successes, 3);
